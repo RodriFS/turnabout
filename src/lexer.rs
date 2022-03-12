@@ -1,20 +1,17 @@
+use self::TokenType::*;
 use std::iter::{self, Peekable};
 use std::str::Chars;
-use self::TokenType::*;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token {
-  pub ttype: TokenType,
-  pub len: usize,
+    pub ttype: TokenType,
+    pub len: usize,
 }
 
 impl Token {
-  fn new(ttype: TokenType, len: usize) -> Self {
-    Self {
-      ttype,
-      len
+    fn new(ttype: TokenType, len: usize) -> Self {
+        Self { ttype, len }
     }
-  }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -64,8 +61,8 @@ impl<'a> Cursor<'a> {
 
     fn next(&mut self) -> Option<char> {
         let next = self.input.next();
-        if let Some(c)  = next {
-          self.pos += c.len_utf8();
+        if let Some(c) = next {
+            self.pos += c.len_utf8();
         }
         next
     }
@@ -85,7 +82,7 @@ impl<'a> Cursor<'a> {
         } {
             let next = self.next();
             if let Some(c) = next {
-              start += c.len_utf8();
+                start += c.len_utf8();
             }
         }
         start
@@ -127,7 +124,7 @@ impl<'a> Cursor<'a> {
         iter::from_fn(|| {
             let prev_pos = self.pos;
             if let Some(c) = self.next() {
-                let token= match c {
+                let token = match c {
                     c if c.is_whitespace() => self.parse_whitespace(),
                     c if c.is_alphabetic() => self.parse_identifier(),
                     c if c.is_digit(10) => self.parse_digit(),
@@ -146,29 +143,32 @@ impl<'a> Cursor<'a> {
                     '}' => RightCuBracket,
                     '/' => match self.peek() {
                         Some('/') => self.parse_line_comment(),
-                        _ => Slash
-                    }
+                        _ => Slash,
+                    },
                     '!' => match self.peek() {
-                        Some('=') => self.consume(NotEqual),
-                        _ => Not
+                        Some('=') => {
+                            self.next();
+                            NotEqual
+                        }
+                        _ => Not,
                     },
                     '<' => match self.peek() {
                         Some('=') => self.consume(LessThanEq),
-                        _ => LessThan
+                        _ => LessThan,
                     },
                     '=' => match self.peek() {
                         Some('=') => self.consume(Equal),
-                        _ => Assignment
+                        _ => Assignment,
                     },
                     '>' => match self.peek() {
                         Some('=') => self.consume(GreaterThanEq),
-                        _ => GreaterThan
+                        _ => GreaterThan,
                     },
                     '_' => match self.peek() {
                         Some(c) if c.is_whitespace() => Underscore,
                         Some(c) if c.is_alphabetic() => self.parse_identifier(),
                         Some(c) if c.is_digit(10) => self.parse_identifier(),
-                        _ => Underscore
+                        _ => Underscore,
                     },
                     _ => Unexpected,
                 };
@@ -189,7 +189,7 @@ fn test_read() {
     assert_eq!(tokens, vec![Token::new(Whitespace, 5)]);
 
     tokens = Cursor::new("abcde").read().collect();
-    assert_eq!(tokens, vec![Token::new(Identifier,5)]);
+    assert_eq!(tokens, vec![Token::new(Identifier, 5)]);
 
     tokens = Cursor::new("12345").read().collect();
     assert_eq!(tokens, vec![Token::new(Digit, 5)]);
@@ -276,67 +276,72 @@ fn test_read() {
     assert_eq!(tokens, vec![Token::new(Unexpected, 1)]);
 
     tokens = Cursor::new(
-r###"   abcde 12345 "hello world" ( ) * + , - ; [ ] ^
-      { } / ! != < <= = == > >= _ _abcde _12345 & // hello"###
-    ).read().collect();
-    assert_eq!(tokens, vec![
-      Token::new(Whitespace, 3),
-      Token::new(Identifier, 5),
-      Token::new(Whitespace, 1),
-      Token::new(Digit, 5),
-      Token::new(Whitespace, 1),
-      Token::new(Literal, 13),
-      Token::new(Whitespace, 1),
-      Token::new(LeftParen, 1),
-      Token::new(Whitespace, 1),
-      Token::new(RightParen, 1),
-      Token::new(Whitespace, 1),
-      Token::new(Asterisk, 1),
-      Token::new(Whitespace, 1),
-      Token::new(Plus, 1),
-      Token::new(Whitespace, 1),
-      Token::new(Comma, 1),
-      Token::new(Whitespace, 1),
-      Token::new(Minus, 1),
-      Token::new(Whitespace, 1),
-      Token::new(Semicolon, 1),
-      Token::new(Whitespace, 1),
-      Token::new(LeftSqBracket, 1),
-      Token::new(Whitespace, 1),
-      Token::new(RightSqBracket, 1),
-      Token::new(Whitespace, 1),
-      Token::new(CircAccent, 1),
-      Token::new(Whitespace, 7),
-      Token::new(LeftCuBracket, 1),
-      Token::new(Whitespace, 1),
-      Token::new(RightCuBracket, 1),
-      Token::new(Whitespace, 1),
-      Token::new(Slash, 1),
-      Token::new(Whitespace, 1),
-      Token::new(Not, 1),
-      Token::new(Whitespace, 1),
-      Token::new(NotEqual, 2),
-      Token::new(Whitespace, 1),
-      Token::new(LessThan, 1),
-      Token::new(Whitespace, 1),
-      Token::new(LessThanEq, 2),
-      Token::new(Whitespace, 1),
-      Token::new(Assignment, 1),
-      Token::new(Whitespace, 1),
-      Token::new(Equal, 2),
-      Token::new(Whitespace, 1),
-      Token::new(GreaterThan, 1),
-      Token::new(Whitespace, 1),
-      Token::new(GreaterThanEq, 2),
-      Token::new(Whitespace, 1),
-      Token::new(Underscore, 1),
-      Token::new(Whitespace, 1),
-      Token::new(Identifier, 6),
-      Token::new(Whitespace, 1),
-      Token::new(Identifier, 6),
-      Token::new(Whitespace, 1),
-      Token::new(Unexpected, 1),
-      Token::new(Whitespace, 1),
-      Token::new(LineComment, 8)
-    ]);
+        r###"   abcde 12345 "hello world" ( ) * + , - ; [ ] ^
+      { } / ! != < <= = == > >= _ _abcde _12345 & // hello"###,
+    )
+    .read()
+    .collect();
+    assert_eq!(
+        tokens,
+        vec![
+            Token::new(Whitespace, 3),
+            Token::new(Identifier, 5),
+            Token::new(Whitespace, 1),
+            Token::new(Digit, 5),
+            Token::new(Whitespace, 1),
+            Token::new(Literal, 13),
+            Token::new(Whitespace, 1),
+            Token::new(LeftParen, 1),
+            Token::new(Whitespace, 1),
+            Token::new(RightParen, 1),
+            Token::new(Whitespace, 1),
+            Token::new(Asterisk, 1),
+            Token::new(Whitespace, 1),
+            Token::new(Plus, 1),
+            Token::new(Whitespace, 1),
+            Token::new(Comma, 1),
+            Token::new(Whitespace, 1),
+            Token::new(Minus, 1),
+            Token::new(Whitespace, 1),
+            Token::new(Semicolon, 1),
+            Token::new(Whitespace, 1),
+            Token::new(LeftSqBracket, 1),
+            Token::new(Whitespace, 1),
+            Token::new(RightSqBracket, 1),
+            Token::new(Whitespace, 1),
+            Token::new(CircAccent, 1),
+            Token::new(Whitespace, 7),
+            Token::new(LeftCuBracket, 1),
+            Token::new(Whitespace, 1),
+            Token::new(RightCuBracket, 1),
+            Token::new(Whitespace, 1),
+            Token::new(Slash, 1),
+            Token::new(Whitespace, 1),
+            Token::new(Not, 1),
+            Token::new(Whitespace, 1),
+            Token::new(NotEqual, 2),
+            Token::new(Whitespace, 1),
+            Token::new(LessThan, 1),
+            Token::new(Whitespace, 1),
+            Token::new(LessThanEq, 2),
+            Token::new(Whitespace, 1),
+            Token::new(Assignment, 1),
+            Token::new(Whitespace, 1),
+            Token::new(Equal, 2),
+            Token::new(Whitespace, 1),
+            Token::new(GreaterThan, 1),
+            Token::new(Whitespace, 1),
+            Token::new(GreaterThanEq, 2),
+            Token::new(Whitespace, 1),
+            Token::new(Underscore, 1),
+            Token::new(Whitespace, 1),
+            Token::new(Identifier, 6),
+            Token::new(Whitespace, 1),
+            Token::new(Identifier, 6),
+            Token::new(Whitespace, 1),
+            Token::new(Unexpected, 1),
+            Token::new(Whitespace, 1),
+            Token::new(LineComment, 8)
+        ]
+    );
 }

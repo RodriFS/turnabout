@@ -1,18 +1,28 @@
-use crate::lexer::{Token, TokenType};
+use crate::{lexer::{Token, TokenType}};
+
+pub fn print_symbol_error(symbol: &char, line_nr: &usize, col: &usize, line: &str) {
+  println!("\x1b[31mUnexpected character '{}' at {}:{}\x1b[0m", symbol, line_nr, col);
+  println!("{} | {}\n", line_nr, line);
+}
+
+pub fn print_unterminated_literal_error(line_nr: &usize, col: &usize, line: &str) {
+  println!("\x1b[31mUnterminated literal at {}:{}\x1b[0m", line_nr, col);
+  println!("{} | {}\n", line_nr, line);
+}
 
 pub fn report_lexer_errors<'a>(source: &'a str, tokens: impl Iterator<Item = Token> + 'a) -> impl Iterator<Item = Token> + 'a {
-  let mut pos = 0;
-  let errors = tokens.inspect(move |token| {
-    if token.ttype == TokenType::Unexpected {
-      let start = source [..pos].find(|c| c == '\n').unwrap_or(0);
-      let end = source[start..].find(|c| c == '\n').unwrap_or(source.len());
-      let line_count = source [..pos].chars().fold(0, |mut a, c| {if c == '\n' { a += 1; a } else { a }});
-
-      println!("{} | {}",line_count, &source[start..end]);
-      println!("\x1b[31m{:1$}^ Unexpected token\x1b[0m", ' ', pos + line_count.to_string().len() + 3);
-      println!("{}", pos);
+  let errors = tokens.inspect(move |token: &Token| {
+    match token.ttype {
+      TokenType::Unexpected { line_nr, col, symbol } => {
+        let line = source.lines().skip(line_nr - 1).next().unwrap_or("Unexpected Error");
+        print_symbol_error(&symbol, &line_nr, &col, line);
+      },
+      TokenType::UnterminatedLiteral { line_nr, col } => {
+        let line = source.lines().skip(line_nr - 1).next().unwrap_or("Unexpected Error");
+        print_unterminated_literal_error(&line_nr, &col, line);
+      }
+      _ => ()
     }
-    pos += token.len;
   });
   return errors;
 }

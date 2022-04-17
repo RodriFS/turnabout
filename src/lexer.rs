@@ -1,8 +1,9 @@
-use self::TokenType::*;
-use std::iter::{self, Peekable};
-use std::str::Chars;
+use crate::cursor::Cursor;
 
-#[derive(Debug, PartialEq, Clone)]
+use self::TokenType::*;
+use std::iter::{self};
+
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Token {
     pub ttype: TokenType,
     pub len: usize,
@@ -14,9 +15,10 @@ impl Token {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType {
     Whitespace,
+    LineBreak,
     Identifier,
     Digit,
     Literal,
@@ -43,49 +45,32 @@ pub enum TokenType {
     Underscore,
     LeftCuBracket,
     RightCuBracket,
-    Unexpected,
+    Unexpected { line_nr: usize, col: usize, symbol: char },
+    UnterminatedLiteral { line_nr: usize, col: usize },
+
 }
 
-pub struct Cursor<'a> {
-    input: Peekable<Chars<'a>>,
-    pos: usize,
+pub struct Lexer<'a> {
+    cursor: Cursor<'a>,
 }
 
-impl<'a> Cursor<'a> {
-    pub fn new(input: &'a str) -> Self {
+impl<'a> Lexer<'a> {
+    pub fn new(cursor: Cursor<'a>) -> Self {
         Self {
-            input: input.chars().peekable(),
-            pos: 0,
+            cursor
         }
     }
 
-    fn next(&mut self) -> Option<char> {
-        let next = self.input.next();
-        if let Some(c) = next {
-            self.pos += c.len_utf8();
-        }
-        next
-    }
-
-    fn peek(&mut self) -> Option<&char> {
-        self.input.peek()
-    }
-
-    fn parse_while<P>(&mut self, predicate: P) -> usize
+    fn parse_while<P>(&mut self, predicate: P)
     where
         P: Fn(&char) -> bool,
     {
-        let mut start = 1;
-        while match self.peek() {
+        while match self.cursor.peek() {
             Some(c) => predicate(c),
             None => false,
         } {
-            let next = self.next();
-            if let Some(c) = next {
-                start += c.len_utf8();
-            }
+            self.cursor.next();
         }
-        start
     }
 
     fn parse_whitespace(&mut self) -> TokenType {
@@ -99,32 +84,38 @@ impl<'a> Cursor<'a> {
     }
 
     fn parse_digit(&mut self) -> TokenType {
-        self.parse_while(|c| c.is_digit(10) || c == &'.');
+        self.parse_while(|c| c.is_digit(10) || *c == '.');
         Digit
     }
 
     fn parse_literal(&mut self) -> TokenType {
-        self.parse_while(|c| c != &'"');
-        self.next();
-        // TODO: Report non terminated string literal
+        let col = self.cursor.get_column();
+        self.parse_while(|c| *c != '"' && *c != '\n');
+        if self.cursor.next().is_none() {
+            let offset = match self.cursor.get_last_char() {
+                Some('\n') => 1,
+                _ => 0
+            };
+            return  UnterminatedLiteral { line_nr: self.cursor.get_line_number() - offset, col };
+        }
         Literal
     }
 
     fn parse_line_comment(&mut self) -> TokenType {
-        self.parse_while(|c| c != &'\n');
+        self.parse_while(|c| *c != '\n');
         LineComment
     }
 
     fn consume(&mut self, token: TokenType) -> TokenType {
-        self.next();
+        self.cursor.next();
         token
     }
 
     pub fn read(&'a mut self) -> impl Iterator<Item = Token> + 'a {
         iter::from_fn(|| {
-            let prev_pos = self.pos;
-            if let Some(c) = self.next() {
+            if let Some(c) = self.cursor.next() {
                 let token = match c {
+                    '\n' => LineBreak,
                     c if c.is_whitespace() => self.parse_whitespace(),
                     c if c.is_alphabetic() => self.parse_identifier(),
                     c if c.is_digit(10) => self.parse_digit(),
@@ -141,38 +132,42 @@ impl<'a> Cursor<'a> {
                     '^' => CircAccent,
                     '{' => LeftCuBracket,
                     '}' => RightCuBracket,
-                    '/' => match self.peek() {
+                    '/' => match self.cursor.peek() {
                         Some('/') => self.parse_line_comment(),
                         _ => Slash,
                     },
-                    '!' => match self.peek() {
+                    '!' => match self.cursor.peek() {
                         Some('=') => {
-                            self.next();
+                            self.cursor.next();
                             NotEqual
                         }
                         _ => Not,
                     },
-                    '<' => match self.peek() {
+                    '<' => match self.cursor.peek() {
                         Some('=') => self.consume(LessThanEq),
                         _ => LessThan,
                     },
-                    '=' => match self.peek() {
+                    '=' => match self.cursor.peek() {
                         Some('=') => self.consume(Equal),
                         _ => Assignment,
                     },
-                    '>' => match self.peek() {
+                    '>' => match self.cursor.peek() {
                         Some('=') => self.consume(GreaterThanEq),
                         _ => GreaterThan,
                     },
-                    '_' => match self.peek() {
+                    '_' => match self.cursor.peek() {
                         Some(c) if c.is_whitespace() => Underscore,
                         Some(c) if c.is_alphabetic() => self.parse_identifier(),
                         Some(c) if c.is_digit(10) => self.parse_identifier(),
                         _ => Underscore,
                     },
-                    _ => Unexpected,
+                    _ => Unexpected {
+                            symbol: c,
+                            line_nr: self.cursor.get_line_number(),
+                            col: self.cursor.get_column(),
+                        },
                 };
-                Some(Token::new(token, self.pos - prev_pos))
+                Some(Token::new(token, self.cursor.get_len_consumed()))
             } else {
                 None
             }
@@ -185,100 +180,106 @@ fn test_read() {
     #[allow(unused_assignments)]
     let mut tokens: Vec<Token> = vec![];
 
-    tokens = Cursor::new("     ").read().collect();
+    tokens = Lexer::new(Cursor::new("     ")).read().collect();
     assert_eq!(tokens, vec![Token::new(Whitespace, 5)]);
 
-    tokens = Cursor::new("abcde").read().collect();
+    tokens = Lexer::new(Cursor::new("abcde")).read().collect();
     assert_eq!(tokens, vec![Token::new(Identifier, 5)]);
 
-    tokens = Cursor::new("12345").read().collect();
+    tokens = Lexer::new(Cursor::new("12345")).read().collect();
     assert_eq!(tokens, vec![Token::new(Digit, 5)]);
 
-    tokens = Cursor::new("\"hello world\"").read().collect();
+    tokens = Lexer::new(Cursor::new(r#""hello world""#)).read().collect();
     assert_eq!(tokens, vec![Token::new(Literal, 13)]);
 
-    tokens = Cursor::new("(").read().collect();
+    tokens = Lexer::new(Cursor::new(r#""hello world"#)).read().collect();
+    assert_eq!(tokens, vec![Token::new(UnterminatedLiteral { line_nr: 1, col: 1 }, 12)]);
+
+    tokens = Lexer::new(Cursor::new("(")).read().collect();
     assert_eq!(tokens, vec![Token::new(LeftParen, 1)]);
 
-    tokens = Cursor::new(")").read().collect();
+    tokens = Lexer::new(Cursor::new(")")).read().collect();
     assert_eq!(tokens, vec![Token::new(RightParen, 1)]);
 
-    tokens = Cursor::new("*").read().collect();
+    tokens = Lexer::new(Cursor::new("*")).read().collect();
     assert_eq!(tokens, vec![Token::new(Asterisk, 1)]);
 
-    tokens = Cursor::new("+").read().collect();
+    tokens = Lexer::new(Cursor::new("+")).read().collect();
     assert_eq!(tokens, vec![Token::new(Plus, 1)]);
 
-    tokens = Cursor::new(",").read().collect();
+    tokens = Lexer::new(Cursor::new(",")).read().collect();
     assert_eq!(tokens, vec![Token::new(Comma, 1)]);
 
-    tokens = Cursor::new("-").read().collect();
+    tokens = Lexer::new(Cursor::new("-")).read().collect();
     assert_eq!(tokens, vec![Token::new(Minus, 1)]);
 
-    tokens = Cursor::new(";").read().collect();
+    tokens = Lexer::new(Cursor::new(";")).read().collect();
     assert_eq!(tokens, vec![Token::new(Semicolon, 1)]);
 
-    tokens = Cursor::new("[").read().collect();
+    tokens = Lexer::new(Cursor::new(":")).read().collect();
+    assert_eq!(tokens, vec![Token::new(Colon, 1)]);
+
+    tokens = Lexer::new(Cursor::new("[")).read().collect();
     assert_eq!(tokens, vec![Token::new(LeftSqBracket, 1)]);
 
-    tokens = Cursor::new("]").read().collect();
+    tokens = Lexer::new(Cursor::new("]")).read().collect();
     assert_eq!(tokens, vec![Token::new(RightSqBracket, 1)]);
 
-    tokens = Cursor::new("^").read().collect();
+    tokens = Lexer::new(Cursor::new("^")).read().collect();
     assert_eq!(tokens, vec![Token::new(CircAccent, 1)]);
 
-    tokens = Cursor::new("{").read().collect();
+    tokens = Lexer::new(Cursor::new("{")).read().collect();
     assert_eq!(tokens, vec![Token::new(LeftCuBracket, 1)]);
 
-    tokens = Cursor::new("}").read().collect();
+    tokens = Lexer::new(Cursor::new("}")).read().collect();
     assert_eq!(tokens, vec![Token::new(RightCuBracket, 1)]);
 
-    tokens = Cursor::new("/").read().collect();
+    tokens = Lexer::new(Cursor::new("/")).read().collect();
     assert_eq!(tokens, vec![Token::new(Slash, 1)]);
 
-    tokens = Cursor::new("// comment").read().collect();
+    tokens = Lexer::new(Cursor::new("// comment")).read().collect();
     assert_eq!(tokens, vec![Token::new(LineComment, 10)]);
 
-    tokens = Cursor::new("!").read().collect();
+    tokens = Lexer::new(Cursor::new("!")).read().collect();
     assert_eq!(tokens, vec![Token::new(Not, 1)]);
 
-    tokens = Cursor::new("!=").read().collect();
+    tokens = Lexer::new(Cursor::new("!=")).read().collect();
     assert_eq!(tokens, vec![Token::new(NotEqual, 2)]);
 
-    tokens = Cursor::new("<").read().collect();
+    tokens = Lexer::new(Cursor::new("<")).read().collect();
     assert_eq!(tokens, vec![Token::new(LessThan, 1)]);
 
-    tokens = Cursor::new("<=").read().collect();
+    tokens = Lexer::new(Cursor::new("<=")).read().collect();
     assert_eq!(tokens, vec![Token::new(LessThanEq, 2)]);
 
-    tokens = Cursor::new("=").read().collect();
+    tokens = Lexer::new(Cursor::new("=")).read().collect();
     assert_eq!(tokens, vec![Token::new(Assignment, 1)]);
 
-    tokens = Cursor::new("==").read().collect();
+    tokens = Lexer::new(Cursor::new("==")).read().collect();
     assert_eq!(tokens, vec![Token::new(Equal, 2)]);
 
-    tokens = Cursor::new(">").read().collect();
+    tokens = Lexer::new(Cursor::new(">")).read().collect();
     assert_eq!(tokens, vec![Token::new(GreaterThan, 1)]);
 
-    tokens = Cursor::new(">=").read().collect();
+    tokens = Lexer::new(Cursor::new(">=")).read().collect();
     assert_eq!(tokens, vec![Token::new(GreaterThanEq, 2)]);
 
-    tokens = Cursor::new("_").read().collect();
+    tokens = Lexer::new(Cursor::new("_")).read().collect();
     assert_eq!(tokens, vec![Token::new(Underscore, 1)]);
 
-    tokens = Cursor::new("_abcde").read().collect();
+    tokens = Lexer::new(Cursor::new("_abcde")).read().collect();
     assert_eq!(tokens, vec![Token::new(Identifier, 6)]);
 
-    tokens = Cursor::new("_12345").read().collect();
+    tokens = Lexer::new(Cursor::new("_12345")).read().collect();
     assert_eq!(tokens, vec![Token::new(Identifier, 6)]);
 
-    tokens = Cursor::new("&").read().collect();
-    assert_eq!(tokens, vec![Token::new(Unexpected, 1)]);
+    tokens = Lexer::new(Cursor::new("&")).read().collect();
+    assert_eq!(tokens, vec![Token::new(Unexpected { line_nr: 1, col: 1, symbol: '&' }, 1)]);
 
-    tokens = Cursor::new(
+    tokens = Lexer::new(Cursor::new(
         r###"   abcde 12345 "hello world" ( ) * + , - ; [ ] ^
       { } / ! != < <= = == > >= _ _abcde _12345 & // hello"###,
-    )
+    ))
     .read()
     .collect();
     assert_eq!(
@@ -310,7 +311,8 @@ fn test_read() {
             Token::new(RightSqBracket, 1),
             Token::new(Whitespace, 1),
             Token::new(CircAccent, 1),
-            Token::new(Whitespace, 7),
+            Token::new(LineBreak, 1),
+            Token::new(Whitespace, 6),
             Token::new(LeftCuBracket, 1),
             Token::new(Whitespace, 1),
             Token::new(RightCuBracket, 1),
@@ -339,9 +341,23 @@ fn test_read() {
             Token::new(Whitespace, 1),
             Token::new(Identifier, 6),
             Token::new(Whitespace, 1),
-            Token::new(Unexpected, 1),
+            Token::new(Unexpected { line_nr: 2, col: 49, symbol: '&' }, 1),
             Token::new(Whitespace, 1),
             Token::new(LineComment, 8)
+        ]
+    );
+
+    tokens = Lexer::new(Cursor::new(
+        r###""hello" "world "###,
+    ))
+    .read()
+    .collect();
+    assert_eq!(
+        tokens,
+        vec![
+            Token::new(Literal, 7),
+            Token::new(Whitespace, 1),
+            Token::new(UnterminatedLiteral { line_nr: 1, col: 9}, 7),
         ]
     );
 }

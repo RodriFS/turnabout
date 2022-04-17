@@ -45,9 +45,15 @@ pub enum TokenType {
     Underscore,
     LeftCuBracket,
     RightCuBracket,
-    Unexpected { line_nr: usize, col: usize, symbol: char },
-    UnterminatedLiteral { line_nr: usize, col: usize },
-
+    Unexpected {
+        line_nr: usize,
+        col: usize,
+        symbol: char,
+    },
+    UnterminatedLiteral {
+        line_nr: usize,
+        col: usize,
+    },
 }
 
 pub struct Lexer<'a> {
@@ -56,9 +62,7 @@ pub struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     pub fn new(cursor: Cursor<'a>) -> Self {
-        Self {
-            cursor
-        }
+        Self { cursor }
     }
 
     fn parse_while<P>(&mut self, predicate: P)
@@ -91,14 +95,18 @@ impl<'a> Lexer<'a> {
     fn parse_literal(&mut self) -> TokenType {
         let col = self.cursor.get_column();
         self.parse_while(|c| *c != '"' && *c != '\n');
-        if self.cursor.next().is_none() {
-            let offset = match self.cursor.get_last_char() {
-                Some('\n') => 1,
-                _ => 0
-            };
-            return  UnterminatedLiteral { line_nr: self.cursor.get_line_number() - offset, col };
+        self.cursor.next();
+        match self.cursor.get_last_char() {
+            Some('"') => Literal,
+            Some('\n') => UnterminatedLiteral {
+                line_nr: self.cursor.get_line_number() - 1,
+                col,
+            },
+            _ => UnterminatedLiteral {
+                line_nr: self.cursor.get_line_number(),
+                col,
+            },
         }
-        Literal
     }
 
     fn parse_line_comment(&mut self) -> TokenType {
@@ -162,10 +170,10 @@ impl<'a> Lexer<'a> {
                         _ => Underscore,
                     },
                     _ => Unexpected {
-                            symbol: c,
-                            line_nr: self.cursor.get_line_number(),
-                            col: self.cursor.get_column(),
-                        },
+                        symbol: c,
+                        line_nr: self.cursor.get_line_number(),
+                        col: self.cursor.get_column(),
+                    },
                 };
                 Some(Token::new(token, self.cursor.get_len_consumed()))
             } else {
@@ -193,7 +201,10 @@ fn test_read() {
     assert_eq!(tokens, vec![Token::new(Literal, 13)]);
 
     tokens = Lexer::new(Cursor::new(r#""hello world"#)).read().collect();
-    assert_eq!(tokens, vec![Token::new(UnterminatedLiteral { line_nr: 1, col: 1 }, 12)]);
+    assert_eq!(
+        tokens,
+        vec![Token::new(UnterminatedLiteral { line_nr: 1, col: 1 }, 12)]
+    );
 
     tokens = Lexer::new(Cursor::new("(")).read().collect();
     assert_eq!(tokens, vec![Token::new(LeftParen, 1)]);
@@ -215,9 +226,6 @@ fn test_read() {
 
     tokens = Lexer::new(Cursor::new(";")).read().collect();
     assert_eq!(tokens, vec![Token::new(Semicolon, 1)]);
-
-    tokens = Lexer::new(Cursor::new(":")).read().collect();
-    assert_eq!(tokens, vec![Token::new(Colon, 1)]);
 
     tokens = Lexer::new(Cursor::new("[")).read().collect();
     assert_eq!(tokens, vec![Token::new(LeftSqBracket, 1)]);
@@ -274,7 +282,17 @@ fn test_read() {
     assert_eq!(tokens, vec![Token::new(Identifier, 6)]);
 
     tokens = Lexer::new(Cursor::new("&")).read().collect();
-    assert_eq!(tokens, vec![Token::new(Unexpected { line_nr: 1, col: 1, symbol: '&' }, 1)]);
+    assert_eq!(
+        tokens,
+        vec![Token::new(
+            Unexpected {
+                line_nr: 1,
+                col: 1,
+                symbol: '&'
+            },
+            1
+        )]
+    );
 
     tokens = Lexer::new(Cursor::new(
         r###"   abcde 12345 "hello world" ( ) * + , - ; [ ] ^
@@ -341,23 +359,40 @@ fn test_read() {
             Token::new(Whitespace, 1),
             Token::new(Identifier, 6),
             Token::new(Whitespace, 1),
-            Token::new(Unexpected { line_nr: 2, col: 49, symbol: '&' }, 1),
+            Token::new(
+                Unexpected {
+                    line_nr: 2,
+                    col: 49,
+                    symbol: '&'
+                },
+                1
+            ),
             Token::new(Whitespace, 1),
             Token::new(LineComment, 8)
         ]
     );
 
-    tokens = Lexer::new(Cursor::new(
-        r###""hello" "world "###,
-    ))
-    .read()
-    .collect();
+    tokens = Lexer::new(Cursor::new(r###""hello" "world "###))
+        .read()
+        .collect();
     assert_eq!(
         tokens,
         vec![
             Token::new(Literal, 7),
             Token::new(Whitespace, 1),
-            Token::new(UnterminatedLiteral { line_nr: 1, col: 9}, 7),
+            Token::new(UnterminatedLiteral { line_nr: 1, col: 9 }, 7),
         ]
+    );
+
+    tokens = Lexer::new(Cursor::new("\"hello\n")).read().collect();
+    assert_eq!(
+        tokens,
+        vec![Token::new(UnterminatedLiteral { line_nr: 1, col: 1 }, 7)]
+    );
+
+    tokens = Lexer::new(Cursor::new(r###""hello"###)).read().collect();
+    assert_eq!(
+        tokens,
+        vec![Token::new(UnterminatedLiteral { line_nr: 1, col: 1 }, 6)]
     );
 }

@@ -1,14 +1,14 @@
 use std::fs;
 use std::io;
 use std::str;
+use turnabout::cursor::Cursor;
 use turnabout::error_reporting::report_lexer_errors;
 use turnabout::lexer::{Lexer, Token};
-use turnabout::cursor::{Cursor};
 
 #[derive(Debug)]
 enum Error {
     IOError(io::Error),
-    Utf8Error(str::Utf8Error)
+    Utf8Error(str::Utf8Error),
 }
 
 impl From<io::Error> for Error {

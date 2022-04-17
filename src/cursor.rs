@@ -1,5 +1,5 @@
 use std::iter::Peekable;
-use std::str::{Chars};
+use std::str::Chars;
 
 #[derive(Clone)]
 pub struct Cursor<'a> {
@@ -14,24 +14,27 @@ pub struct Cursor<'a> {
 }
 
 impl Iterator for Cursor<'_> {
-  type Item = char;
+    type Item = char;
 
-  fn next(&mut self) -> Option<char> {
-    match self.input.next() {
-      Some(c) => {
-        let char_length = c.len_utf8();
-        self.last_char.replace(c);
-        self.char_count += char_length;
-        self.word_count += char_length;
-        if c == '\n' {
-          self.line_nr += 1;
-          self.line_start = self.char_count;
+    fn next(&mut self) -> Option<char> {
+        match self.input.next() {
+            Some(c) => {
+                let char_length = c.len_utf8();
+                self.last_char.replace(c);
+                self.char_count += char_length;
+                self.word_count += char_length;
+                if c == '\n' {
+                    self.line_nr += 1;
+                    self.line_start = self.char_count;
+                }
+                Some(c)
+            }
+            _ => {
+                self.last_char = None;
+                None
+            }
         }
-        Some(c)
-      },
-      _ => None
     }
-}
 }
 
 impl<'a> Cursor<'a> {
@@ -42,12 +45,12 @@ impl<'a> Cursor<'a> {
             word_count: 0,
             line_nr: 0,
             line_start: 0,
-            last_char: None
+            last_char: None,
         }
     }
 
     pub fn peek(&mut self) -> Option<&char> {
-      self.input.peek()
+        self.input.peek()
     }
 
     pub fn get_len_consumed(&mut self) -> usize {
@@ -57,14 +60,14 @@ impl<'a> Cursor<'a> {
     }
 
     pub fn get_line_number(&self) -> usize {
-      self.line_nr + 1
+        self.line_nr + 1
     }
 
     pub fn get_column(&self) -> usize {
-      self.char_count - self.line_start
+        self.char_count - self.line_start
     }
 
     pub fn get_last_char(&self) -> Option<char> {
-      self.last_char
+        self.last_char
     }
 }

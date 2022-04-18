@@ -1,13 +1,13 @@
 use crate::lexer::{Token, TokenType};
 use std::iter::{self};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum NumberType {
     Float(f64),
     Int(i64),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum KeywordType {
     If,
     Else,
@@ -17,7 +17,7 @@ pub enum KeywordType {
     False
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ASTToken<'a> {
     Operator(TokenType),
     Punctuation(TokenType),
@@ -25,6 +25,7 @@ pub enum ASTToken<'a> {
     String(&'a str),
     Keyword(KeywordType),
     Identifier(&'a str),
+    Ignore(TokenType)
 }
 
 pub struct Parser<'a, I: Iterator<Item = Token>> {
@@ -38,8 +39,13 @@ impl<'a, I: Iterator<Item = Token>> Parser<'a, I> {
         Self { source, tokens, curren_pos: 0 }
     }
 
-    pub fn parse_digit(&self, token: Token) -> Option<ASTToken<'a>> {
-        let number = &self.source[self.curren_pos..token.len];
+
+    fn get_token_string(&self, len: usize) -> &'a str {
+        &self.source[self.curren_pos..self.curren_pos + len]
+    }
+
+    fn parse_digit(&self, token: Token) -> Option<ASTToken<'a>> {
+        let number = self.get_token_string(token.len);
         if number.contains(".") {
             if let Ok(parsed_number) = number.parse::<f64>() {
                 return Some(ASTToken::Number(NumberType::Float(parsed_number)))
@@ -52,12 +58,12 @@ impl<'a, I: Iterator<Item = Token>> Parser<'a, I> {
         None
     }
 
-    pub fn parse_literal(&self, token: Token) -> Option<ASTToken<'a>> {
-        return Some(ASTToken::String(&self.source[self.curren_pos..token.len]))
+    fn parse_literal(&self, token: Token) -> Option<ASTToken<'a>> {
+        return Some(ASTToken::String(self.get_token_string(token.len)))
     }
 
-    pub fn parse_identifier(&self, token: Token) -> Option<ASTToken<'a>> {
-        let value = &self.source[self.curren_pos..token.len];
+    fn parse_identifier(&self, token: Token) -> Option<ASTToken<'a>> {
+        let value = self.get_token_string(token.len);
         match value {
             "if" => Some(ASTToken::Keyword(KeywordType::If)),
             "else" => Some(ASTToken::Keyword(KeywordType::Else)),
@@ -110,19 +116,16 @@ impl<'a, I: Iterator<Item = Token>> Parser<'a, I> {
                     TokenType::Literal => self.parse_literal(token),
                     // Keyword & Identifier
                     TokenType::Identifier => self.parse_identifier(token),
-                    // Ignore and filter
-                    TokenType::Whitespace => None,
-                    TokenType::LineBreak => None,
-                    TokenType::LineComment => None,
-                    TokenType::Underscore => None,
-                    TokenType::Unexpected { .. } => None,
-                    TokenType::UnterminatedLiteral { .. } => None,
+                    _ => Some(ASTToken::Ignore(token.ttype))
                 };
                 self.curren_pos += token.len;
                 ast_token
             } else {
                 None
             }
+        }).filter(|token| match token {
+            ASTToken::Ignore(_) => false,
+            _ => true
         })
     }
 }

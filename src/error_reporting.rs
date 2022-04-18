@@ -1,5 +1,5 @@
 use crate::lexer::{Token, TokenType};
-use crate::utils::FoldIfNoneExt;
+use crate::utils::LooseAnyExt;
 
 pub fn print_symbol_error(symbol: &char, line_nr: &usize, col: &usize, line: &str) {
     println!(
@@ -16,9 +16,9 @@ pub fn print_unterminated_literal_error(line_nr: &usize, col: &usize, line: &str
 
 pub fn report_lexer_errors<'a>(
     source: &'a str,
-    tokens:Vec<Token>,
+    tokens: Vec<Token>,
 ) -> bool {
-    tokens.iter().fold(false, |_, token: &Token| match token.ttype {
+    tokens.iter().loose_any(|token: &Token| match token.ttype {
         TokenType::Unexpected {
             line_nr,
             col,

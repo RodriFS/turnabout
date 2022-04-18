@@ -119,7 +119,7 @@ impl<'a> Lexer<'a> {
         token
     }
 
-    pub fn read(&'a mut self) -> impl Iterator<Item = Token> + 'a {
+    pub fn read(&'a mut self) -> Vec<Token> {
         iter::from_fn(|| {
             if let Some(c) = self.cursor.next() {
                 let token = match c {
@@ -180,6 +180,7 @@ impl<'a> Lexer<'a> {
                 None
             }
         })
+        .collect()
     }
 }
 
@@ -188,100 +189,100 @@ fn test_read() {
     #[allow(unused_assignments)]
     let mut tokens: Vec<Token> = vec![];
 
-    tokens = Lexer::new(Cursor::new("     ")).read().collect();
+    tokens = Lexer::new(Cursor::new("     ")).read();
     assert_eq!(tokens, vec![Token::new(Whitespace, 5)]);
 
-    tokens = Lexer::new(Cursor::new("abcde")).read().collect();
+    tokens = Lexer::new(Cursor::new("abcde")).read();
     assert_eq!(tokens, vec![Token::new(Identifier, 5)]);
 
-    tokens = Lexer::new(Cursor::new("12345")).read().collect();
+    tokens = Lexer::new(Cursor::new("12345")).read();
     assert_eq!(tokens, vec![Token::new(Digit, 5)]);
 
-    tokens = Lexer::new(Cursor::new(r#""hello world""#)).read().collect();
+    tokens = Lexer::new(Cursor::new(r#""hello world""#)).read();
     assert_eq!(tokens, vec![Token::new(Literal, 13)]);
 
-    tokens = Lexer::new(Cursor::new(r#""hello world"#)).read().collect();
+    tokens = Lexer::new(Cursor::new(r#""hello world"#)).read();
     assert_eq!(
         tokens,
         vec![Token::new(UnterminatedLiteral { line_nr: 1, col: 1 }, 12)]
     );
 
-    tokens = Lexer::new(Cursor::new("(")).read().collect();
+    tokens = Lexer::new(Cursor::new("(")).read();
     assert_eq!(tokens, vec![Token::new(LeftParen, 1)]);
 
-    tokens = Lexer::new(Cursor::new(")")).read().collect();
+    tokens = Lexer::new(Cursor::new(")")).read();
     assert_eq!(tokens, vec![Token::new(RightParen, 1)]);
 
-    tokens = Lexer::new(Cursor::new("*")).read().collect();
+    tokens = Lexer::new(Cursor::new("*")).read();
     assert_eq!(tokens, vec![Token::new(Asterisk, 1)]);
 
-    tokens = Lexer::new(Cursor::new("+")).read().collect();
+    tokens = Lexer::new(Cursor::new("+")).read();
     assert_eq!(tokens, vec![Token::new(Plus, 1)]);
 
-    tokens = Lexer::new(Cursor::new(",")).read().collect();
+    tokens = Lexer::new(Cursor::new(",")).read();
     assert_eq!(tokens, vec![Token::new(Comma, 1)]);
 
-    tokens = Lexer::new(Cursor::new("-")).read().collect();
+    tokens = Lexer::new(Cursor::new("-")).read();
     assert_eq!(tokens, vec![Token::new(Minus, 1)]);
 
-    tokens = Lexer::new(Cursor::new(";")).read().collect();
+    tokens = Lexer::new(Cursor::new(";")).read();
     assert_eq!(tokens, vec![Token::new(Semicolon, 1)]);
 
-    tokens = Lexer::new(Cursor::new("[")).read().collect();
+    tokens = Lexer::new(Cursor::new("[")).read();
     assert_eq!(tokens, vec![Token::new(LeftSqBracket, 1)]);
 
-    tokens = Lexer::new(Cursor::new("]")).read().collect();
+    tokens = Lexer::new(Cursor::new("]")).read();
     assert_eq!(tokens, vec![Token::new(RightSqBracket, 1)]);
 
-    tokens = Lexer::new(Cursor::new("^")).read().collect();
+    tokens = Lexer::new(Cursor::new("^")).read();
     assert_eq!(tokens, vec![Token::new(CircAccent, 1)]);
 
-    tokens = Lexer::new(Cursor::new("{")).read().collect();
+    tokens = Lexer::new(Cursor::new("{")).read();
     assert_eq!(tokens, vec![Token::new(LeftCuBracket, 1)]);
 
-    tokens = Lexer::new(Cursor::new("}")).read().collect();
+    tokens = Lexer::new(Cursor::new("}")).read();
     assert_eq!(tokens, vec![Token::new(RightCuBracket, 1)]);
 
-    tokens = Lexer::new(Cursor::new("/")).read().collect();
+    tokens = Lexer::new(Cursor::new("/")).read();
     assert_eq!(tokens, vec![Token::new(Slash, 1)]);
 
-    tokens = Lexer::new(Cursor::new("// comment")).read().collect();
+    tokens = Lexer::new(Cursor::new("// comment")).read();
     assert_eq!(tokens, vec![Token::new(LineComment, 10)]);
 
-    tokens = Lexer::new(Cursor::new("!")).read().collect();
+    tokens = Lexer::new(Cursor::new("!")).read();
     assert_eq!(tokens, vec![Token::new(Not, 1)]);
 
-    tokens = Lexer::new(Cursor::new("!=")).read().collect();
+    tokens = Lexer::new(Cursor::new("!=")).read();
     assert_eq!(tokens, vec![Token::new(NotEqual, 2)]);
 
-    tokens = Lexer::new(Cursor::new("<")).read().collect();
+    tokens = Lexer::new(Cursor::new("<")).read();
     assert_eq!(tokens, vec![Token::new(LessThan, 1)]);
 
-    tokens = Lexer::new(Cursor::new("<=")).read().collect();
+    tokens = Lexer::new(Cursor::new("<=")).read();
     assert_eq!(tokens, vec![Token::new(LessThanEq, 2)]);
 
-    tokens = Lexer::new(Cursor::new("=")).read().collect();
+    tokens = Lexer::new(Cursor::new("=")).read();
     assert_eq!(tokens, vec![Token::new(Assignment, 1)]);
 
-    tokens = Lexer::new(Cursor::new("==")).read().collect();
+    tokens = Lexer::new(Cursor::new("==")).read();
     assert_eq!(tokens, vec![Token::new(Equal, 2)]);
 
-    tokens = Lexer::new(Cursor::new(">")).read().collect();
+    tokens = Lexer::new(Cursor::new(">")).read();
     assert_eq!(tokens, vec![Token::new(GreaterThan, 1)]);
 
-    tokens = Lexer::new(Cursor::new(">=")).read().collect();
+    tokens = Lexer::new(Cursor::new(">=")).read();
     assert_eq!(tokens, vec![Token::new(GreaterThanEq, 2)]);
 
-    tokens = Lexer::new(Cursor::new("_")).read().collect();
+    tokens = Lexer::new(Cursor::new("_")).read();
     assert_eq!(tokens, vec![Token::new(Underscore, 1)]);
 
-    tokens = Lexer::new(Cursor::new("_abcde")).read().collect();
+    tokens = Lexer::new(Cursor::new("_abcde")).read();
     assert_eq!(tokens, vec![Token::new(Identifier, 6)]);
 
-    tokens = Lexer::new(Cursor::new("_12345")).read().collect();
+    tokens = Lexer::new(Cursor::new("_12345")).read();
     assert_eq!(tokens, vec![Token::new(Identifier, 6)]);
 
-    tokens = Lexer::new(Cursor::new("&")).read().collect();
+    tokens = Lexer::new(Cursor::new("&")).read();
     assert_eq!(
         tokens,
         vec![Token::new(
@@ -298,8 +299,7 @@ fn test_read() {
         r###"   abcde 12345 "hello world" ( ) * + , - ; [ ] ^
       { } / ! != < <= = == > >= _ _abcde _12345 & // hello"###,
     ))
-    .read()
-    .collect();
+    .read();
     assert_eq!(
         tokens,
         vec![
@@ -372,9 +372,7 @@ fn test_read() {
         ]
     );
 
-    tokens = Lexer::new(Cursor::new(r###""hello" "world "###))
-        .read()
-        .collect();
+    tokens = Lexer::new(Cursor::new(r###""hello" "world "###)).read();
     assert_eq!(
         tokens,
         vec![
@@ -384,13 +382,13 @@ fn test_read() {
         ]
     );
 
-    tokens = Lexer::new(Cursor::new("\"hello\n")).read().collect();
+    tokens = Lexer::new(Cursor::new("\"hello\n")).read();
     assert_eq!(
         tokens,
         vec![Token::new(UnterminatedLiteral { line_nr: 1, col: 1 }, 7)]
     );
 
-    tokens = Lexer::new(Cursor::new(r###""hello"###)).read().collect();
+    tokens = Lexer::new(Cursor::new(r###""hello"###)).read();
     assert_eq!(
         tokens,
         vec![Token::new(UnterminatedLiteral { line_nr: 1, col: 1 }, 6)]

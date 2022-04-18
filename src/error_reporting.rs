@@ -1,4 +1,5 @@
 use crate::lexer::{Token, TokenType};
+use crate::utils::FoldIfNoneExt;
 
 pub fn print_symbol_error(symbol: &char, line_nr: &usize, col: &usize, line: &str) {
     println!(
@@ -15,9 +16,9 @@ pub fn print_unterminated_literal_error(line_nr: &usize, col: &usize, line: &str
 
 pub fn report_lexer_errors<'a>(
     source: &'a str,
-    tokens: impl Iterator<Item = Token> + 'a,
-) -> impl Iterator<Item = Token> + 'a {
-    let errors = tokens.inspect(move |token: &Token| match token.ttype {
+    tokens:Vec<Token>,
+) -> bool {
+    tokens.iter().fold(false, |_, token: &Token| match token.ttype {
         TokenType::Unexpected {
             line_nr,
             col,
@@ -29,6 +30,7 @@ pub fn report_lexer_errors<'a>(
                 .next()
                 .unwrap_or("Unexpected Error");
             print_symbol_error(&symbol, &line_nr, &col, line);
+            true
         }
         TokenType::UnterminatedLiteral { line_nr, col } => {
             let line = source
@@ -37,8 +39,8 @@ pub fn report_lexer_errors<'a>(
                 .next()
                 .unwrap_or("Unexpected Error");
             print_unterminated_literal_error(&line_nr, &col, line);
+            true
         }
-        _ => (),
-    });
-    return errors;
+        _ => false,
+    })
 }

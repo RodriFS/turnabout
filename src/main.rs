@@ -3,7 +3,8 @@ use std::io;
 use std::str;
 use turnabout::cursor::Cursor;
 use turnabout::error_reporting::report_lexer_errors;
-use turnabout::lexer::{Lexer, Token};
+use turnabout::lexer::{Lexer};
+use turnabout::parser::{Parser, ASTToken};
 
 #[derive(Debug)]
 enum Error {
@@ -30,9 +31,16 @@ fn main() -> Result<(), Error> {
         let buffer = str::from_utf8(&bytes)?;
         let cursor = Cursor::new(buffer);
         let mut lexer = Lexer::new(cursor);
-        let tokens = lexer.read();
-        let tokens = report_lexer_errors(&buffer, tokens);
-        println!("{:?}", tokens.collect::<Vec<Token>>());
+        let tokens: Vec<_> = lexer.read().collect();
+
+        let lexer_errors = report_lexer_errors(&buffer, tokens.clone());
+        if lexer_errors {
+            return Ok(())
+        }
+
+        let mut parser = Parser::new(&buffer, tokens.into_iter());
+        let ast_tokens = parser.parse();
+        println!("{:?}", ast_tokens.collect::<Vec<ASTToken>>());
         return Ok(());
     }
     loop {
@@ -40,8 +48,15 @@ fn main() -> Result<(), Error> {
         io::stdin().read_line(&mut buffer)?;
         let cursor = Cursor::new(&buffer);
         let mut lexer = Lexer::new(cursor);
-        let tokens = lexer.read();
-        let tokens = report_lexer_errors(&buffer, tokens);
-        println!("{:?}", tokens.collect::<Vec<Token>>());
+        let tokens: Vec<_> = lexer.read().collect();
+
+        let lexer_errors = report_lexer_errors(&buffer, tokens.clone());
+        if lexer_errors {
+            return Ok(())
+        }
+
+        let mut parser = Parser::new(&buffer, tokens.into_iter());
+        let ast_tokens = parser.parse();
+        println!("{:?}", ast_tokens.collect::<Vec<ASTToken>>());
     }
 }

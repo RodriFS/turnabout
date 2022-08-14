@@ -1,8 +1,10 @@
 use std::iter::Peekable;
+use std::ops::Range;
 use std::str::Chars;
 
 #[derive(Clone)]
 pub struct Cursor<'a> {
+    source: &'a str,
     input: Peekable<Chars<'a>>,
     // from the start of the source to the position of the iterator
     char_count: usize,
@@ -40,6 +42,7 @@ impl Iterator for Cursor<'_> {
 impl<'a> Cursor<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
+            source: input,
             input: input.chars().peekable(),
             char_count: 0,
             word_count: 0,
@@ -69,5 +72,9 @@ impl<'a> Cursor<'a> {
 
     pub fn get_last_char(&self) -> Option<char> {
         self.last_char
+    }
+
+    pub fn get_in_range(&self, range: Range<usize>) -> &'a str {
+        &self.source[range]
     }
 }

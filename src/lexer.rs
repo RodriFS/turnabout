@@ -1,7 +1,7 @@
 use crate::cursor::Cursor;
 
 use self::TokenType::*;
-use std::iter::{self};
+use std::iter;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Token {
@@ -10,7 +10,7 @@ pub struct Token {
 }
 
 impl Token {
-    fn new(ttype: TokenType, len: usize) -> Self {
+    pub fn new(ttype: TokenType, len: usize) -> Self {
         Self { ttype, len }
     }
 }

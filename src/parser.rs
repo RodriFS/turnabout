@@ -46,7 +46,7 @@ fn convert_un_operator(token: &TokenType) -> Option<UnOperator> {
     Some(op)
 }
 
-fn convert_bin_operator(token: TokenType) -> Option<BinOperator> {
+fn convert_bin_operator(token: &TokenType) -> Option<BinOperator> {
     let op = match token {
         TokenType::Assignment => BinOperator::Assignment,
         TokenType::GreaterThan => BinOperator::GreaterThan,
@@ -142,31 +142,16 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
         }
     }
 
-    fn peek_operator<F>(&mut self, filter_fn: F) -> Option<&TokenType>
-    where
-        F: FnOnce(&&Token) -> bool,
-    {
-        self.peek().filter(filter_fn).map(|op| &op.ttype)
+    fn peek_un_operator(&mut self) -> Option<UnOperator> {
+        self.peek().and_then(|t| convert_un_operator(&t.ttype))
     }
 
-    fn peek_un_operator<F>(&mut self, filter_fn: F) -> Option<UnOperator>
-    where
-        F: FnOnce(&&Token) -> bool,
-    {
-        self.peek_operator(filter_fn)
-            .and_then(|tt| convert_un_operator(tt))
-    }
-
-    fn take_operator(&mut self) -> Option<TokenType> {
-        self.next().map(|t| t.ttype)
+    fn peek_bin_operator(&mut self) -> Option<BinOperator> {
+        self.peek().and_then(|t| convert_bin_operator(&t.ttype))
     }
 
     fn take_un_operator(&mut self) -> Option<UnOperator> {
-        self.take_operator().and_then(|tt| convert_un_operator(&tt))
-    }
-
-    fn take_bin_operator(&mut self) -> Option<BinOperator> {
-        self.take_operator().and_then(|tt| convert_bin_operator(tt))
+        self.next().and_then(|t| convert_un_operator(&t.ttype))
     }
 
     fn parse_primary(&mut self) -> Option<Expr> {
@@ -186,15 +171,11 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
             Some(Token { ttype: rest }) => Expr::Ignore(rest),
             None => return None,
         };
-        dbg!(&token);
         Some(token)
     }
 
     fn parse_unary(&mut self) -> Option<Expr> {
-        if self
-            .peek_un_operator(|token| matches!(token.ttype, TokenType::Not | TokenType::Minus))
-            .is_some()
-        {
+        if self.peek_un_operator().is_some() {
             let operator = self.take_un_operator().unwrap();
             return self
                 .parse_unary()
@@ -209,12 +190,13 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
             return None;
         }
 
-        while let Some(op) = self.take_bin_operator() {
+        while let Some(op) = self.peek_bin_operator() {
             let prec = op.precendence();
             if prec < min_prec {
                 break;
             }
 
+            self.next();
             left = self
                 .parse_binary(prec)
                 .and_then(|right| Some(Expr::make_binary(op, left.unwrap(), right)));
@@ -301,18 +283,31 @@ mod tests {
         );
 
         let prec1 = parse("1 * 2 + 3;");
-        let prec2 = parse("3 + 1 * 2;");
-        let correct_prec = vec![Expr::Binary {
-            operator: BinOperator::Plus,
-            left: Box::new(Expr::Binary {
-                operator: BinOperator::Asterisk,
-                left: Box::new(Expr::Literal(Int(1))),
-                right: Box::new(Expr::Literal(Int(2))),
-            }),
-            right: Box::new(Expr::Literal(Int(3))),
-        }];
+        assert_eq!(
+            prec1,
+            vec![Expr::Binary {
+                operator: BinOperator::Plus,
+                left: Box::new(Expr::Binary {
+                    operator: BinOperator::Asterisk,
+                    left: Box::new(Expr::Literal(Int(1))),
+                    right: Box::new(Expr::Literal(Int(2))),
+                }),
+                right: Box::new(Expr::Literal(Int(3))),
+            }]
+        );
 
-        assert_eq!(prec1, correct_prec);
-        assert_eq!(prec2, correct_prec);
+        let prec2 = parse("3 + 1 * 2;");
+        assert_eq!(
+            prec2,
+            vec![Expr::Binary {
+                operator: BinOperator::Plus,
+                left: Box::new(Expr::Literal(Int(3))),
+                right: Box::new(Expr::Binary {
+                    operator: BinOperator::Asterisk,
+                    left: Box::new(Expr::Literal(Int(1))),
+                    right: Box::new(Expr::Literal(Int(2))),
+                }),
+            }]
+        );
     }
 }

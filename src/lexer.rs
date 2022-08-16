@@ -102,10 +102,7 @@ impl<'a> Lexer<'a> {
                 kind: LiteralKind::Bool(false),
             },
             // TODO separate identifiers from keywords and store them in the enum
-            v => {
-                dbg!(v);
-                Identifier
-            }
+            _ => Identifier,
         }
     }
 
@@ -125,7 +122,6 @@ impl<'a> Lexer<'a> {
         let column_nr = self.cursor.get_column();
         let literal = self.get_symbol(|c| *c != '"' && *c != '\n');
         self.cursor.next();
-        dbg!(literal, self.cursor.get_last_char());
         match self.cursor.get_last_char() {
             Some('"') => Literal {
                 kind: LiteralKind::Str(literal[1..].to_string()),

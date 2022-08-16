@@ -1,11 +1,26 @@
 {
   "configurations": {
-    "Rust - Test": {
+    "Rust - Prog": {
       "adapter": "CodeLLDB",
       "configuration": {
         "request": "launch",
         "program": "${workspaceRoot}/target/debug/turnabout",
         "args": ["test.txt"]
+      }
+    },
+    "Rust - Test": {
+      "adapter": "CodeLLDB",
+      "configuration": {
+        "request": "launch",
+        "cwd": "${workspaceRoot}",
+        "program": "cargo",
+        "args": ["test"],
+        "breakpoints": {
+          "exception": {
+            "cpp_throw": "N",
+            "cpp_catch": "N"
+          }
+        }
       }
     }
   }

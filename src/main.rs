@@ -4,7 +4,7 @@ use std::str;
 use turnabout::cursor::Cursor;
 use turnabout::error_reporting::report_lexer_errors;
 use turnabout::lexer::Lexer;
-use turnabout::parser::{ASTToken, Parser};
+use turnabout::parser::{Expr, Parser};
 
 #[derive(Debug)]
 enum Error {
@@ -28,14 +28,13 @@ fn read(buffer: &str) {
     let cursor = Cursor::new(&buffer);
     let mut lexer = Lexer::new(cursor);
     let tokens = lexer.read();
-
-    let lexer_errors = report_lexer_errors(&buffer, tokens.clone());
+    let lexer_errors = report_lexer_errors(&buffer, &tokens);
     if lexer_errors {
         return;
     }
-    let mut parser = Parser::new(&buffer, tokens.into_iter());
+    let mut parser = Parser::new(tokens.into_iter());
     let ast_tokens = parser.parse();
-    println!("{:?}", ast_tokens.collect::<Vec<ASTToken>>());
+    println!("{:?}", ast_tokens.collect::<Vec<Expr>>());
 }
 
 fn main() -> Result<(), Error> {

@@ -16,3 +16,11 @@ pub trait LooseAnyExt: Iterator {
 }
 
 impl<I: Iterator> LooseAnyExt for I {}
+
+#[derive(Debug, PartialEq)]
+pub enum LiteralKind {
+    Float(f64),
+    Int(i64),
+    Str(String),
+    Bool(bool),
+}

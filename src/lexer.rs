@@ -1,27 +1,27 @@
-use crate::cursor::Cursor;
+use crate::{cursor::Cursor, utils::LiteralKind};
 
 use self::TokenType::*;
 use std::iter;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq)]
 pub struct Token {
     pub ttype: TokenType,
-    pub len: usize,
 }
 
 impl Token {
-    pub fn new(ttype: TokenType, len: usize) -> Self {
-        Self { ttype, len }
+    pub fn new(ttype: TokenType) -> Self {
+        Self { ttype }
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq)]
 pub enum TokenType {
     Whitespace,
     LineBreak,
     Identifier,
-    Digit,
-    Literal,
+    Literal {
+        kind: LiteralKind,
+    },
     LineComment,
     NotEqual,
     Not,
@@ -82,29 +82,61 @@ impl<'a> Lexer<'a> {
         Whitespace
     }
 
+    fn get_symbol<F>(&mut self, predicate_fn: F) -> &'a str
+    where
+        F: Fn(&char) -> bool,
+    {
+        let from = self.cursor.get_column() - 1;
+        self.parse_while(predicate_fn);
+        let to = self.cursor.get_column();
+        self.cursor.get_in_range(from..to)
+    }
+
     fn parse_identifier(&mut self) -> TokenType {
-        self.parse_while(|c| c.is_alphanumeric());
-        Identifier
+        let literal = self.get_symbol(|c| c.is_alphanumeric());
+        match literal {
+            "true" => Literal {
+                kind: LiteralKind::Bool(true),
+            },
+            "false" => Literal {
+                kind: LiteralKind::Bool(false),
+            },
+            // TODO separate identifiers from keywords and store them in the enum
+            v => {
+                dbg!(v);
+                Identifier
+            }
+        }
     }
 
     fn parse_digit(&mut self) -> TokenType {
-        self.parse_while(|c| c.is_digit(10) || *c == '.');
-        Digit
+        let literal = self.get_symbol(|c| c.is_digit(10) || *c == '.');
+        match literal {
+            f if f.contains('.') => Literal {
+                kind: LiteralKind::Float(f.parse::<f64>().unwrap()),
+            },
+            int => Literal {
+                kind: LiteralKind::Int(int.parse::<i64>().unwrap()),
+            },
+        }
     }
 
     fn parse_literal(&mut self) -> TokenType {
-        let col = self.cursor.get_column();
-        self.parse_while(|c| *c != '"' && *c != '\n');
+        let column_nr = self.cursor.get_column();
+        let literal = self.get_symbol(|c| *c != '"' && *c != '\n');
         self.cursor.next();
+        dbg!(literal, self.cursor.get_last_char());
         match self.cursor.get_last_char() {
-            Some('"') => Literal,
+            Some('"') => Literal {
+                kind: LiteralKind::Str(literal[1..].to_string()),
+            },
             Some('\n') => UnterminatedLiteral {
                 line_nr: self.cursor.get_line_number() - 1,
-                col,
+                col: column_nr,
             },
             _ => UnterminatedLiteral {
                 line_nr: self.cursor.get_line_number(),
-                col,
+                col: column_nr,
             },
         }
     }
@@ -175,222 +207,233 @@ impl<'a> Lexer<'a> {
                         col: self.cursor.get_column(),
                     },
                 };
-                Some(Token::new(token, self.cursor.get_len_consumed()))
+                Some(Token::new(token))
             } else {
                 None
             }
+        })
+        .filter(|t| {
+            !matches!(
+                t.ttype,
+                TokenType::Whitespace | TokenType::LineBreak | TokenType::Semicolon
+            )
         })
         .collect()
     }
 }
 
-#[test]
-fn test_read() {
-    #[allow(unused_assignments)]
-    let mut tokens: Vec<Token> = vec![];
+#[cfg(test)]
+mod tests {
+    use crate::lexer::*;
 
-    tokens = Lexer::new(Cursor::new("     ")).read();
-    assert_eq!(tokens, vec![Token::new(Whitespace, 5)]);
+    fn read(string: &str) -> Vec<Token> {
+        Lexer::new(Cursor::new(string)).read()
+    }
 
-    tokens = Lexer::new(Cursor::new("abcde")).read();
-    assert_eq!(tokens, vec![Token::new(Identifier, 5)]);
+    macro_rules! mk_tokens {
+        ($($x: expr),*) => {{
+            let mut vector = Vec::new();
+            $(vector.push(Token::new($x));)*
+            vector
+        }}
+    }
 
-    tokens = Lexer::new(Cursor::new("12345")).read();
-    assert_eq!(tokens, vec![Token::new(Digit, 5)]);
+    #[test]
+    fn test_read() {
+        #[allow(unused_assignments)]
+        let mut tokens: Vec<Token> = vec![];
 
-    tokens = Lexer::new(Cursor::new(r#""hello world""#)).read();
-    assert_eq!(tokens, vec![Token::new(Literal, 13)]);
+        tokens = read("     ");
+        assert_eq!(tokens, vec![]);
 
-    tokens = Lexer::new(Cursor::new(r#""hello world"#)).read();
-    assert_eq!(
-        tokens,
-        vec![Token::new(UnterminatedLiteral { line_nr: 1, col: 1 }, 12)]
-    );
+        tokens = read("abcde");
+        assert_eq!(tokens, mk_tokens![Identifier]);
 
-    tokens = Lexer::new(Cursor::new("(")).read();
-    assert_eq!(tokens, vec![Token::new(LeftParen, 1)]);
+        tokens = read("12345");
+        assert_eq!(
+            tokens,
+            mk_tokens![Literal {
+                kind: LiteralKind::Int(12345)
+            }]
+        );
 
-    tokens = Lexer::new(Cursor::new(")")).read();
-    assert_eq!(tokens, vec![Token::new(RightParen, 1)]);
+        tokens = read(r#""hello world""#);
+        assert_eq!(
+            tokens,
+            mk_tokens![Literal {
+                kind: LiteralKind::Str("hello world".to_string())
+            }]
+        );
 
-    tokens = Lexer::new(Cursor::new("*")).read();
-    assert_eq!(tokens, vec![Token::new(Asterisk, 1)]);
+        tokens = read(r#""hello world"#);
+        assert_eq!(
+            tokens,
+            mk_tokens![UnterminatedLiteral { line_nr: 1, col: 1 }]
+        );
 
-    tokens = Lexer::new(Cursor::new("+")).read();
-    assert_eq!(tokens, vec![Token::new(Plus, 1)]);
+        tokens = read("(");
+        assert_eq!(tokens, mk_tokens![LeftParen]);
 
-    tokens = Lexer::new(Cursor::new(",")).read();
-    assert_eq!(tokens, vec![Token::new(Comma, 1)]);
+        tokens = read(")");
+        assert_eq!(tokens, mk_tokens![RightParen]);
 
-    tokens = Lexer::new(Cursor::new("-")).read();
-    assert_eq!(tokens, vec![Token::new(Minus, 1)]);
+        tokens = read("*");
+        assert_eq!(tokens, mk_tokens![Asterisk]);
 
-    tokens = Lexer::new(Cursor::new(";")).read();
-    assert_eq!(tokens, vec![Token::new(Semicolon, 1)]);
+        tokens = read("+");
+        assert_eq!(tokens, mk_tokens![Plus]);
 
-    tokens = Lexer::new(Cursor::new("[")).read();
-    assert_eq!(tokens, vec![Token::new(LeftSqBracket, 1)]);
+        tokens = read(",");
+        assert_eq!(tokens, mk_tokens![Comma]);
 
-    tokens = Lexer::new(Cursor::new("]")).read();
-    assert_eq!(tokens, vec![Token::new(RightSqBracket, 1)]);
+        tokens = read("-");
+        assert_eq!(tokens, mk_tokens![Minus]);
 
-    tokens = Lexer::new(Cursor::new("^")).read();
-    assert_eq!(tokens, vec![Token::new(CircAccent, 1)]);
+        tokens = read(";");
+        assert_eq!(tokens, vec![]);
 
-    tokens = Lexer::new(Cursor::new("{")).read();
-    assert_eq!(tokens, vec![Token::new(LeftCuBracket, 1)]);
+        tokens = read("[");
+        assert_eq!(tokens, mk_tokens![LeftSqBracket]);
 
-    tokens = Lexer::new(Cursor::new("}")).read();
-    assert_eq!(tokens, vec![Token::new(RightCuBracket, 1)]);
+        tokens = read("]");
+        assert_eq!(tokens, mk_tokens![RightSqBracket]);
 
-    tokens = Lexer::new(Cursor::new("/")).read();
-    assert_eq!(tokens, vec![Token::new(Slash, 1)]);
+        tokens = read("^");
+        assert_eq!(tokens, mk_tokens![CircAccent]);
 
-    tokens = Lexer::new(Cursor::new("// comment")).read();
-    assert_eq!(tokens, vec![Token::new(LineComment, 10)]);
+        tokens = read("{");
+        assert_eq!(tokens, mk_tokens![LeftCuBracket]);
 
-    tokens = Lexer::new(Cursor::new("!")).read();
-    assert_eq!(tokens, vec![Token::new(Not, 1)]);
+        tokens = read("}");
+        assert_eq!(tokens, mk_tokens![RightCuBracket]);
 
-    tokens = Lexer::new(Cursor::new("!=")).read();
-    assert_eq!(tokens, vec![Token::new(NotEqual, 2)]);
+        tokens = read("/");
+        assert_eq!(tokens, mk_tokens![Slash]);
 
-    tokens = Lexer::new(Cursor::new("<")).read();
-    assert_eq!(tokens, vec![Token::new(LessThan, 1)]);
+        tokens = read("// comment");
+        assert_eq!(tokens, mk_tokens![LineComment]);
 
-    tokens = Lexer::new(Cursor::new("<=")).read();
-    assert_eq!(tokens, vec![Token::new(LessThanEq, 2)]);
+        tokens = read("!");
+        assert_eq!(tokens, mk_tokens![Not]);
 
-    tokens = Lexer::new(Cursor::new("=")).read();
-    assert_eq!(tokens, vec![Token::new(Assignment, 1)]);
+        tokens = read("!=");
+        assert_eq!(tokens, mk_tokens![NotEqual]);
 
-    tokens = Lexer::new(Cursor::new("==")).read();
-    assert_eq!(tokens, vec![Token::new(Equal, 2)]);
+        tokens = read("<");
+        assert_eq!(tokens, mk_tokens![LessThan]);
 
-    tokens = Lexer::new(Cursor::new(">")).read();
-    assert_eq!(tokens, vec![Token::new(GreaterThan, 1)]);
+        tokens = read("<=");
+        assert_eq!(tokens, mk_tokens![LessThanEq]);
 
-    tokens = Lexer::new(Cursor::new(">=")).read();
-    assert_eq!(tokens, vec![Token::new(GreaterThanEq, 2)]);
+        tokens = read("=");
+        assert_eq!(tokens, mk_tokens![Assignment]);
 
-    tokens = Lexer::new(Cursor::new("_")).read();
-    assert_eq!(tokens, vec![Token::new(Underscore, 1)]);
+        tokens = read("==");
+        assert_eq!(tokens, mk_tokens![Equal]);
 
-    tokens = Lexer::new(Cursor::new("_abcde")).read();
-    assert_eq!(tokens, vec![Token::new(Identifier, 6)]);
+        tokens = read(">");
+        assert_eq!(tokens, mk_tokens![GreaterThan]);
 
-    tokens = Lexer::new(Cursor::new("_12345")).read();
-    assert_eq!(tokens, vec![Token::new(Identifier, 6)]);
+        tokens = read(">=");
+        assert_eq!(tokens, mk_tokens![GreaterThanEq]);
 
-    tokens = Lexer::new(Cursor::new("&")).read();
-    assert_eq!(
-        tokens,
-        vec![Token::new(
-            Unexpected {
+        tokens = read("_");
+        assert_eq!(tokens, mk_tokens![Underscore]);
+
+        tokens = read("_abcde");
+        assert_eq!(tokens, mk_tokens![Identifier]);
+
+        tokens = read("_12345");
+        assert_eq!(tokens, mk_tokens![Identifier]);
+
+        tokens = read("&");
+        assert_eq!(
+            tokens,
+            mk_tokens![Unexpected {
                 line_nr: 1,
                 col: 1,
                 symbol: '&'
-            },
-            1
-        )]
-    );
+            }]
+        );
 
-    tokens = Lexer::new(Cursor::new(
-        r###"   abcde 12345 "hello world" ( ) * + , - ; [ ] ^
+        tokens = read(
+            r###"   abcde 12345 "hello world" ( ) * + , - ; [ ] ^
       { } / ! != < <= = == > >= _ _abcde _12345 & // hello"###,
-    ))
-    .read();
-    assert_eq!(
-        tokens,
-        vec![
-            Token::new(Whitespace, 3),
-            Token::new(Identifier, 5),
-            Token::new(Whitespace, 1),
-            Token::new(Digit, 5),
-            Token::new(Whitespace, 1),
-            Token::new(Literal, 13),
-            Token::new(Whitespace, 1),
-            Token::new(LeftParen, 1),
-            Token::new(Whitespace, 1),
-            Token::new(RightParen, 1),
-            Token::new(Whitespace, 1),
-            Token::new(Asterisk, 1),
-            Token::new(Whitespace, 1),
-            Token::new(Plus, 1),
-            Token::new(Whitespace, 1),
-            Token::new(Comma, 1),
-            Token::new(Whitespace, 1),
-            Token::new(Minus, 1),
-            Token::new(Whitespace, 1),
-            Token::new(Semicolon, 1),
-            Token::new(Whitespace, 1),
-            Token::new(LeftSqBracket, 1),
-            Token::new(Whitespace, 1),
-            Token::new(RightSqBracket, 1),
-            Token::new(Whitespace, 1),
-            Token::new(CircAccent, 1),
-            Token::new(LineBreak, 1),
-            Token::new(Whitespace, 6),
-            Token::new(LeftCuBracket, 1),
-            Token::new(Whitespace, 1),
-            Token::new(RightCuBracket, 1),
-            Token::new(Whitespace, 1),
-            Token::new(Slash, 1),
-            Token::new(Whitespace, 1),
-            Token::new(Not, 1),
-            Token::new(Whitespace, 1),
-            Token::new(NotEqual, 2),
-            Token::new(Whitespace, 1),
-            Token::new(LessThan, 1),
-            Token::new(Whitespace, 1),
-            Token::new(LessThanEq, 2),
-            Token::new(Whitespace, 1),
-            Token::new(Assignment, 1),
-            Token::new(Whitespace, 1),
-            Token::new(Equal, 2),
-            Token::new(Whitespace, 1),
-            Token::new(GreaterThan, 1),
-            Token::new(Whitespace, 1),
-            Token::new(GreaterThanEq, 2),
-            Token::new(Whitespace, 1),
-            Token::new(Underscore, 1),
-            Token::new(Whitespace, 1),
-            Token::new(Identifier, 6),
-            Token::new(Whitespace, 1),
-            Token::new(Identifier, 6),
-            Token::new(Whitespace, 1),
-            Token::new(
+        );
+        assert_eq!(
+            tokens,
+            mk_tokens![
+                Identifier,
+                Literal {
+                    kind: LiteralKind::Int(12345)
+                },
+                Literal {
+                    kind: LiteralKind::Str("hello world".to_string())
+                },
+                LeftParen,
+                RightParen,
+                Asterisk,
+                Plus,
+                Comma,
+                Minus,
+                LeftSqBracket,
+                RightSqBracket,
+                CircAccent,
+                LeftCuBracket,
+                RightCuBracket,
+                Slash,
+                Not,
+                NotEqual,
+                LessThan,
+                LessThanEq,
+                Assignment,
+                Equal,
+                GreaterThan,
+                GreaterThanEq,
+                Underscore,
+                Identifier,
+                Identifier,
                 Unexpected {
                     line_nr: 2,
                     col: 49,
                     symbol: '&'
                 },
-                1
-            ),
-            Token::new(Whitespace, 1),
-            Token::new(LineComment, 8)
-        ]
-    );
+                LineComment
+            ]
+        );
 
-    tokens = Lexer::new(Cursor::new(r###""hello" "world "###)).read();
-    assert_eq!(
-        tokens,
-        vec![
-            Token::new(Literal, 7),
-            Token::new(Whitespace, 1),
-            Token::new(UnterminatedLiteral { line_nr: 1, col: 9 }, 7),
-        ]
-    );
+        tokens = read(r###""hello" "world "###);
+        assert_eq!(
+            tokens,
+            mk_tokens![
+                Literal {
+                    kind: LiteralKind::Str("hello".to_string())
+                },
+                UnterminatedLiteral { line_nr: 1, col: 9 }
+            ]
+        );
 
-    tokens = Lexer::new(Cursor::new("\"hello\n")).read();
-    assert_eq!(
-        tokens,
-        vec![Token::new(UnterminatedLiteral { line_nr: 1, col: 1 }, 7)]
-    );
+        tokens = read("\"hello\n");
+        assert_eq!(
+            tokens,
+            mk_tokens![UnterminatedLiteral { line_nr: 1, col: 1 }]
+        );
 
-    tokens = Lexer::new(Cursor::new(r###""hello"###)).read();
-    assert_eq!(
-        tokens,
-        vec![Token::new(UnterminatedLiteral { line_nr: 1, col: 1 }, 6)]
-    );
+        tokens = read(r###""hello"###);
+        assert_eq!(
+            tokens,
+            mk_tokens![UnterminatedLiteral { line_nr: 1, col: 1 }]
+        );
+
+        tokens = read("!true");
+        assert_eq!(
+            tokens,
+            mk_tokens![
+                Not,
+                Literal {
+                    kind: LiteralKind::Bool(true)
+                }
+            ]
+        )
+    }
 }

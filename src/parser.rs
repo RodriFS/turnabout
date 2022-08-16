@@ -1,14 +1,11 @@
-use crate::lexer::{Token, TokenType};
+use crate::{
+    lexer::{Token, TokenType},
+    utils::LiteralKind,
+};
 use std::iter::{self, Peekable};
 
 #[derive(Debug, PartialEq)]
-pub enum NumberType {
-    Float(f64),
-    Int(i64),
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Operator {
+pub enum BinOperator {
     Assignment,
     GreaterThan,
     LessThan,
@@ -22,96 +19,114 @@ pub enum Operator {
     Slash,
 }
 
-fn convert_operator(token: TokenType) -> Option<Operator> {
+impl BinOperator {
+    fn precendence(&self) -> usize {
+        use BinOperator::*;
+        match self {
+            Assignment => 1,
+            GreaterThan | LessThan | GreaterThanEq | LessThanEq | Equal | NotEqual => 2,
+            Plus | Minus => 3,
+            Asterisk | Slash => 4,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum UnOperator {
+    Not,
+    Negative,
+}
+
+fn convert_un_operator(token: &TokenType) -> Option<UnOperator> {
     let op = match token {
-        TokenType::Assignment => Operator::Assignment,
-        TokenType::GreaterThan => Operator::GreaterThan,
-        TokenType::LessThan => Operator::LessThan,
-        TokenType::GreaterThanEq => Operator::GreaterThanEq,
-        TokenType::LessThanEq => Operator::LessThanEq,
-        TokenType::Equal => Operator::Equal,
-        TokenType::NotEqual => Operator::NotEqual,
-        TokenType::Plus => Operator::Plus,
-        TokenType::Minus => Operator::Minus,
-        TokenType::Asterisk => Operator::Asterisk,
-        TokenType::Slash => Operator::Slash,
-        _ => panic!("Not an operator"),
+        TokenType::Not => UnOperator::Not,
+        TokenType::Minus => UnOperator::Negative,
+        _ => return None,
     };
     Some(op)
 }
 
-fn get_token_string<'a>(source: &'a str, current_pos: usize, len: usize) -> &'a str {
-    let data = &source[current_pos..current_pos + len];
-    data
+fn convert_bin_operator(token: TokenType) -> Option<BinOperator> {
+    let op = match token {
+        TokenType::Assignment => BinOperator::Assignment,
+        TokenType::GreaterThan => BinOperator::GreaterThan,
+        TokenType::LessThan => BinOperator::LessThan,
+        TokenType::GreaterThanEq => BinOperator::GreaterThanEq,
+        TokenType::LessThanEq => BinOperator::LessThanEq,
+        TokenType::Equal => BinOperator::Equal,
+        TokenType::NotEqual => BinOperator::NotEqual,
+        TokenType::Plus => BinOperator::Plus,
+        TokenType::Minus => BinOperator::Minus,
+        TokenType::Asterisk => BinOperator::Asterisk,
+        TokenType::Slash => BinOperator::Slash,
+        _ => return None,
+    };
+    Some(op)
 }
 
 #[derive(Debug, PartialEq)]
-pub enum ASTToken<'a> {
-    Number(NumberType),
-    String(&'a str),
-    Boolean(bool),
-    Identifier(&'a str),
+pub enum Expr {
+    Literal(LiteralKind),
     Lambda {
-        name: &'a str,
-        vars: Vec<&'a str>,
-        body: Box<ASTToken<'a>>,
+        name: String,
+        vars: Vec<String>,
+        body: Box<Expr>,
     },
     FnCall {
-        func: Box<ASTToken<'a>>,
-        args: Box<ASTToken<'a>>,
+        func: Box<Expr>,
+        args: Box<Expr>,
     },
     If {
-        cond: Box<ASTToken<'a>>,
-        then: Box<ASTToken<'a>>,
-        els: Option<Box<ASTToken<'a>>>,
+        cond: Box<Expr>,
+        then: Box<Expr>,
+        els: Option<Box<Expr>>,
     },
     Unary {
-        operator: Operator,
-        right: Box<ASTToken<'a>>,
+        operator: UnOperator,
+        right: Box<Expr>,
     },
     Binary {
-        operator: Operator,
-        left: Box<ASTToken<'a>>,
-        right: Box<ASTToken<'a>>,
+        operator: BinOperator,
+        left: Box<Expr>,
+        right: Box<Expr>,
     },
-    Grouping(Box<ASTToken<'a>>),
+    Grouping(Box<Expr>),
     Ignore(TokenType),
 }
 
-pub struct Parser<'a, I: Iterator<Item = Token>> {
-    source: &'a str,
-    tokens: Peekable<I>,
-    current_pos: usize,
+impl<'a> Expr {
+    fn make_unary(operator: UnOperator, right: Expr) -> Expr {
+        Expr::Unary {
+            operator,
+            right: Box::new(right),
+        }
+    }
+
+    fn make_binary(operator: BinOperator, left: Expr, right: Expr) -> Expr {
+        Expr::Binary {
+            operator,
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
 }
 
-impl<'a, I: Iterator<Item = Token>> Parser<'a, I> {
-    pub fn new(source: &'a str, tokens: I) -> Self {
+pub struct Parser<I: Iterator<Item = Token>> {
+    tokens: Peekable<I>,
+}
+
+impl<'a, I: Iterator<Item = Token>> Parser<I> {
+    pub fn new(tokens: I) -> Self {
         Self {
-            source,
             tokens: tokens.peekable(),
-            current_pos: 0,
         }
     }
 
     fn next(&mut self) -> Option<Token> {
-        if let Some(token) = self.tokens.next() {
-            self.current_pos += token.len;
-            return Some(token);
-        }
-        None
+        self.tokens.next()
     }
 
     fn peek(&mut self) -> Option<&Token> {
-        while self.tokens.peek().is_some() {
-            if matches!(
-                self.tokens.peek().unwrap().ttype,
-                TokenType::Whitespace | TokenType::Semicolon | TokenType::LineBreak
-            ) {
-                self.next();
-            } else {
-                break;
-            }
-        }
         self.tokens.peek()
     }
 
@@ -127,203 +142,177 @@ impl<'a, I: Iterator<Item = Token>> Parser<'a, I> {
         }
     }
 
-    fn peek_operator<F>(&mut self, filter_fn: F) -> Option<Operator>
+    fn peek_operator<F>(&mut self, filter_fn: F) -> Option<&TokenType>
     where
         F: FnOnce(&&Token) -> bool,
     {
-        if self.peek().filter(filter_fn).is_none() {
-            return None;
-        }
-
-        let op = self.peek().unwrap();
-        convert_operator(op.ttype)
+        self.peek().filter(filter_fn).map(|op| &op.ttype)
     }
 
-    fn take_operator(&mut self) -> Option<Operator> {
-        if self.peek().is_none() {
-            return None;
-        }
-
-        let op = self.next().unwrap();
-        convert_operator(op.ttype)
+    fn peek_un_operator<F>(&mut self, filter_fn: F) -> Option<UnOperator>
+    where
+        F: FnOnce(&&Token) -> bool,
+    {
+        self.peek_operator(filter_fn)
+            .and_then(|tt| convert_un_operator(tt))
     }
 
-    fn primary(&mut self) -> Option<ASTToken<'a>> {
-        let source = self.source;
-        let current_pos = self.current_pos;
+    fn take_operator(&mut self) -> Option<TokenType> {
+        self.next().map(|t| t.ttype)
+    }
+
+    fn take_un_operator(&mut self) -> Option<UnOperator> {
+        self.take_operator().and_then(|tt| convert_un_operator(&tt))
+    }
+
+    fn take_bin_operator(&mut self) -> Option<BinOperator> {
+        self.take_operator().and_then(|tt| convert_bin_operator(tt))
+    }
+
+    fn parse_primary(&mut self) -> Option<Expr> {
         let token = match self.next() {
             Some(Token {
-                ttype: TokenType::Digit,
-                len,
-            }) => {
-                let literal = get_token_string(source, current_pos, len);
-                if literal.contains('.') {
-                    let float = literal.parse::<f64>().unwrap();
-                    ASTToken::Number(NumberType::Float(float))
-                } else {
-                    let int = literal.parse::<i64>().unwrap();
-                    ASTToken::Number(NumberType::Int(int))
-                }
-            }
-            Some(Token {
-                ttype: TokenType::Literal,
-                len,
-            }) => match get_token_string(source, current_pos, len) {
-                "true" => ASTToken::Boolean(true),
-                "false" => ASTToken::Boolean(false),
-                value => ASTToken::String(value),
-            },
-            Some(Token {
-                ttype: TokenType::Identifier,
-                len,
-            }) => ASTToken::Identifier(get_token_string(source, current_pos, len)),
+                ttype: TokenType::Literal { kind },
+            }) => Expr::Literal(kind),
             Some(Token {
                 ttype: TokenType::LeftParen,
-                len: _,
-            }) => match self.expression() {
+            }) => match self.parse_expression() {
                 Some(expr) => {
                     self.parse_while(|t| t == &TokenType::RightParen);
-                    ASTToken::Grouping(Box::new(expr))
+                    Expr::Grouping(Box::new(expr))
                 }
                 None => return None,
             },
-            Some(Token {
-                ttype: rest,
-                len: _,
-            }) => ASTToken::Ignore(rest),
+            Some(Token { ttype: rest }) => Expr::Ignore(rest),
             None => return None,
         };
+        dbg!(&token);
         Some(token)
     }
 
-    fn unary(&mut self) -> Option<ASTToken<'a>> {
+    fn parse_unary(&mut self) -> Option<Expr> {
         if self
-            .peek_operator(|token| matches!(token.ttype, TokenType::Not | TokenType::Minus))
+            .peek_un_operator(|token| matches!(token.ttype, TokenType::Not | TokenType::Minus))
             .is_some()
         {
-            let operator = self.take_operator().unwrap();
-            return self.unary().and_then(|right| {
-                Some(ASTToken::Unary {
-                    operator,
-                    right: Box::new(right),
-                })
-            });
+            let operator = self.take_un_operator().unwrap();
+            return self
+                .parse_unary()
+                .and_then(|right| Some(Expr::make_unary(operator, right)));
         }
-        self.primary()
+        self.parse_primary()
     }
 
-    fn factor(&mut self) -> Option<ASTToken<'a>> {
-        self.unary().and_then(|expr| {
-            if self
-                .peek_operator(|token| {
-                    matches!(token.ttype, TokenType::Slash | TokenType::Asterisk)
-                })
-                .is_some()
-            {
-                let operator = self.take_operator().unwrap();
-                match self.unary() {
-                    Some(right) => Some(ASTToken::Binary {
-                        operator,
-                        left: Box::new(expr),
-                        right: Box::new(right),
-                    }),
-                    _ => Some(expr),
-                }
-            } else {
-                Some(expr)
+    fn parse_binary(&mut self, min_prec: usize) -> Option<Expr> {
+        let mut left = self.parse_unary();
+        if left.is_none() {
+            return None;
+        }
+
+        while let Some(op) = self.take_bin_operator() {
+            let prec = op.precendence();
+            if prec < min_prec {
+                break;
             }
-        })
+
+            left = self
+                .parse_binary(prec)
+                .and_then(|right| Some(Expr::make_binary(op, left.unwrap(), right)));
+        }
+
+        left
     }
 
-    fn term(&mut self) -> Option<ASTToken<'a>> {
-        self.factor().and_then(|expr| {
-            if self
-                .peek_operator(|token| matches!(token.ttype, TokenType::Minus | TokenType::Plus))
-                .is_some()
-            {
-                let operator = self.take_operator().unwrap();
-                match self.factor() {
-                    Some(right) => Some(ASTToken::Binary {
-                        operator,
-                        left: Box::new(expr),
-                        right: Box::new(right),
-                    }),
-                    _ => Some(expr),
-                }
-            } else {
-                Some(expr)
-            }
-        })
+    fn parse_expression(&mut self) -> Option<Expr> {
+        self.parse_binary(0)
     }
 
-    fn comparison(&mut self) -> Option<ASTToken<'a>> {
-        self.term().and_then(|expr| {
-            if self
-                .peek_operator(|token| {
-                    matches!(
-                        token.ttype,
-                        TokenType::GreaterThan
-                            | TokenType::GreaterThanEq
-                            | TokenType::LessThan
-                            | TokenType::LessThanEq
-                    )
-                })
-                .is_some()
-            {
-                let operator = self.take_operator().unwrap();
-                match self.term() {
-                    Some(right) => Some(ASTToken::Binary {
-                        operator,
-                        left: Box::new(expr),
-                        right: Box::new(right),
-                    }),
-                    _ => Some(expr),
-                }
-            } else {
-                Some(expr)
-            }
-        })
-    }
-
-    fn equality(&mut self) -> Option<ASTToken<'a>> {
-        self.comparison().and_then(|expr| {
-            if self
-                .peek_operator(|token| {
-                    matches!(token.ttype, TokenType::Equal | TokenType::NotEqual)
-                })
-                .is_some()
-            {
-                let operator = self.take_operator().unwrap();
-                match self.comparison() {
-                    Some(right) => Some(ASTToken::Binary {
-                        operator,
-                        left: Box::new(expr),
-                        right: Box::new(right),
-                    }),
-                    _ => Some(expr),
-                }
-            } else {
-                Some(expr)
-            }
-        })
-    }
-
-    fn expression(&mut self) -> Option<ASTToken<'a>> {
-        self.equality()
-    }
-
-    pub fn parse(&'a mut self) -> impl Iterator<Item = ASTToken> + 'a {
+    pub fn parse(&'a mut self) -> impl Iterator<Item = Expr> + 'a {
         iter::from_fn(|| {
             if self.tokens.peek().is_some() {
-                let expr = self.expression();
+                let expr = self.parse_expression();
                 expr
             } else {
                 None
             }
         })
         .filter(|token| match token {
-            ASTToken::Ignore(_) => false,
+            Expr::Ignore(_) => false,
             _ => true,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::cursor::*;
+    use crate::lexer::*;
+    use crate::parser::{LiteralKind::*, *};
+
+    fn parse<'a>(buffer: &'a str) -> Vec<Expr> {
+        let cursor = Cursor::new(&buffer);
+        let mut lexer = Lexer::new(cursor);
+        let tokens = lexer.read();
+        let mut parser = Parser::new(tokens.into_iter());
+        parser.parse().collect()
+    }
+
+    #[test]
+    fn test_unary() {
+        let one = parse("!true;");
+        assert_eq!(
+            one,
+            vec![Expr::Unary {
+                operator: UnOperator::Not,
+                right: Box::new(Expr::Literal(Bool(true))),
+            }],
+        );
+
+        let two = parse("!-false;");
+        assert_eq!(
+            two,
+            vec![Expr::Unary {
+                operator: UnOperator::Not,
+                right: Box::new(Expr::Unary {
+                    operator: UnOperator::Negative,
+                    right: Box::new(Expr::Literal(Bool(false)))
+                })
+            }]
+        );
+
+        let nothing = parse("!");
+        assert_eq!(nothing, vec![]);
+    }
+
+    #[test]
+    fn test_binary() {
+        let assoc = parse("1 + 2 + 3;");
+        assert_eq!(
+            assoc,
+            vec![Expr::Binary {
+                operator: BinOperator::Plus,
+                left: Box::new(Expr::Literal(Int(1))),
+                right: Box::new(Expr::Binary {
+                    operator: BinOperator::Plus,
+                    left: Box::new(Expr::Literal(Int(2))),
+                    right: Box::new(Expr::Literal(Int(3)))
+                })
+            }]
+        );
+
+        let prec1 = parse("1 * 2 + 3;");
+        let prec2 = parse("3 + 1 * 2;");
+        let correct_prec = vec![Expr::Binary {
+            operator: BinOperator::Plus,
+            left: Box::new(Expr::Binary {
+                operator: BinOperator::Asterisk,
+                left: Box::new(Expr::Literal(Int(1))),
+                right: Box::new(Expr::Literal(Int(2))),
+            }),
+            right: Box::new(Expr::Literal(Int(3))),
+        }];
+
+        assert_eq!(prec1, correct_prec);
+        assert_eq!(prec2, correct_prec);
     }
 }

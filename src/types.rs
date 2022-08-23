@@ -2,6 +2,8 @@ use std::cmp::Ordering;
 use std::ops::Add;
 use std::ops::Div;
 use std::ops::Mul;
+use std::ops::Neg;
+use std::ops::Not;
 use std::ops::Sub;
 
 #[derive(Debug)]
@@ -11,6 +13,7 @@ pub enum Type {
     Str(String),
     Bool(bool),
     NaN,
+    Unit,
 }
 
 impl Type {
@@ -21,6 +24,7 @@ impl Type {
             Type::Bool(v) => Type::Str(v.to_string()),
             Type::NaN => Type::Str("NaN".to_string()),
             Type::Str(v) => Type::Str(v.to_string()),
+            Type::Unit => Type::Str("()".to_string()),
         }
     }
 }
@@ -111,6 +115,29 @@ impl Div for Type {
     }
 }
 
+impl Not for Type {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Type::Bool(v) => Type::Bool(!v),
+            _ => panic!("Not a binary type"),
+        }
+    }
+}
+
+impl Neg for Type {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Type::Int(v) => Type::Int(-v),
+            Type::Float(v) => Type::Float(-v),
+            _ => panic!("Can't negate a type that is not a number"),
+        }
+    }
+}
+
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         match self {
@@ -136,6 +163,7 @@ impl PartialEq for Type {
                 Type::Bool(rhs) => lhs == rhs,
                 _ => false,
             },
+            Type::Unit => false,
         }
     }
 
@@ -166,6 +194,7 @@ impl PartialOrd for Type {
                 _ => None,
             },
             Type::NaN => None,
+            Type::Unit => None,
         }
     }
 }

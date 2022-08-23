@@ -1,5 +1,5 @@
 use crate::{
-    parser::{BinOperator, Expr},
+    parser::{BinOperator, Expr, UnOperator},
     types::Type,
     utils::LiteralKind,
 };
@@ -17,7 +17,14 @@ impl Interpreter {
             Expr::Literal(LiteralKind::Int(v)) => Type::Int(v),
             Expr::Literal(LiteralKind::Str(v)) => Type::Str(v),
             Expr::Literal(LiteralKind::Bool(v)) => Type::Bool(v),
-            _ => unimplemented!(),
+            _ => unreachable!(),
+        }
+    }
+
+    fn eval_unary(&self, op: UnOperator, right: Expr) -> Type {
+        match op {
+            UnOperator::Not => !self.eval(right),
+            UnOperator::Negative => -self.eval(right),
         }
     }
 
@@ -37,14 +44,24 @@ impl Interpreter {
         }
     }
 
+    fn eval_sequence(&self, exprs: Vec<Box<Expr>>) -> Type {
+        exprs
+            .into_iter()
+            .fold(Type::Unit, |_, expr| self.eval(*expr))
+    }
+
     pub fn eval(&self, expr: Expr) -> Type {
         match expr {
+            Expr::Program(expr) => self.eval(*expr),
+            Expr::Sequence(exprs) => self.eval_sequence(exprs),
+            Expr::Statement(expr) => self.eval(*expr),
+            Expr::Grouping(expr) => self.eval(*expr),
+            Expr::Unary { operator, right } => self.eval_unary(operator, *right),
             Expr::Binary {
                 operator,
                 left,
                 right,
             } => self.eval_binary(operator, *left, *right),
-            Expr::Grouping(expr) => self.eval(*expr),
             lit => self.eval_literal(lit),
         }
     }

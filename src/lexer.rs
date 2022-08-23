@@ -54,6 +54,7 @@ pub enum TokenType {
         line_nr: usize,
         col: usize,
     },
+    EOF,
 }
 
 pub struct Lexer<'a> {
@@ -148,7 +149,7 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn read(&'a mut self) -> Vec<Token> {
-        iter::from_fn(|| {
+        let mut tokens: Vec<Token> = iter::from_fn(|| {
             if let Some(c) = self.cursor.next() {
                 let token = match c {
                     '\n' => LineBreak,
@@ -208,13 +209,12 @@ impl<'a> Lexer<'a> {
                 None
             }
         })
-        .filter(|t| {
-            !matches!(
-                t.ttype,
-                TokenType::Whitespace | TokenType::LineBreak | TokenType::Semicolon
-            )
-        })
-        .collect()
+        .filter(|t| !matches!(t.ttype, TokenType::Whitespace | TokenType::LineBreak))
+        .collect();
+
+        tokens.push(Token::new(TokenType::EOF));
+
+        tokens
     }
 }
 
@@ -240,116 +240,125 @@ mod tests {
         let mut tokens: Vec<Token> = vec![];
 
         tokens = read("     ");
-        assert_eq!(tokens, vec![]);
+        assert_eq!(tokens, mk_tokens![EOF]);
 
         tokens = read("abcde");
-        assert_eq!(tokens, mk_tokens![Identifier]);
+        assert_eq!(tokens, mk_tokens![Identifier, EOF]);
 
         tokens = read("12345");
         assert_eq!(
             tokens,
-            mk_tokens![Literal {
-                kind: LiteralKind::Int(12345)
-            }]
+            mk_tokens![
+                Literal {
+                    kind: LiteralKind::Int(12345)
+                },
+                EOF
+            ]
         );
 
         tokens = read(r#""hello world""#);
         assert_eq!(
             tokens,
-            mk_tokens![Literal {
-                kind: LiteralKind::Str("hello world".to_string())
-            }]
+            mk_tokens![
+                Literal {
+                    kind: LiteralKind::Str("hello world".to_string())
+                },
+                EOF
+            ]
         );
 
         tokens = read(r#""hello world"#);
         assert_eq!(
             tokens,
-            mk_tokens![UnterminatedLiteral { line_nr: 1, col: 1 }]
+            mk_tokens![UnterminatedLiteral { line_nr: 1, col: 1 }, EOF]
         );
 
         tokens = read("(");
-        assert_eq!(tokens, mk_tokens![LeftParen]);
+        assert_eq!(tokens, mk_tokens![LeftParen, EOF]);
 
         tokens = read(")");
-        assert_eq!(tokens, mk_tokens![RightParen]);
+        assert_eq!(tokens, mk_tokens![RightParen, EOF]);
 
         tokens = read("*");
-        assert_eq!(tokens, mk_tokens![Asterisk]);
+        assert_eq!(tokens, mk_tokens![Asterisk, EOF]);
 
         tokens = read("+");
-        assert_eq!(tokens, mk_tokens![Plus]);
+        assert_eq!(tokens, mk_tokens![Plus, EOF]);
 
         tokens = read(",");
-        assert_eq!(tokens, mk_tokens![Comma]);
+        assert_eq!(tokens, mk_tokens![Comma, EOF]);
 
         tokens = read("-");
-        assert_eq!(tokens, mk_tokens![Minus]);
+        assert_eq!(tokens, mk_tokens![Minus, EOF]);
 
         tokens = read(";");
-        assert_eq!(tokens, vec![]);
+        assert_eq!(tokens, mk_tokens![Semicolon, EOF]);
 
         tokens = read("[");
-        assert_eq!(tokens, mk_tokens![LeftSqBracket]);
+        assert_eq!(tokens, mk_tokens![LeftSqBracket, EOF]);
 
         tokens = read("]");
-        assert_eq!(tokens, mk_tokens![RightSqBracket]);
+        assert_eq!(tokens, mk_tokens![RightSqBracket, EOF]);
 
         tokens = read("^");
-        assert_eq!(tokens, mk_tokens![CircAccent]);
+        assert_eq!(tokens, mk_tokens![CircAccent, EOF]);
 
         tokens = read("{");
-        assert_eq!(tokens, mk_tokens![LeftCuBracket]);
+        assert_eq!(tokens, mk_tokens![LeftCuBracket, EOF]);
 
         tokens = read("}");
-        assert_eq!(tokens, mk_tokens![RightCuBracket]);
+        assert_eq!(tokens, mk_tokens![RightCuBracket, EOF]);
 
         tokens = read("/");
-        assert_eq!(tokens, mk_tokens![Slash]);
+        assert_eq!(tokens, mk_tokens![Slash, EOF]);
 
         tokens = read("// comment");
-        assert_eq!(tokens, mk_tokens![LineComment]);
+        assert_eq!(tokens, mk_tokens![LineComment, EOF]);
 
         tokens = read("!");
-        assert_eq!(tokens, mk_tokens![Not]);
+        assert_eq!(tokens, mk_tokens![Not, EOF]);
 
         tokens = read("!=");
-        assert_eq!(tokens, mk_tokens![NotEqual]);
+        assert_eq!(tokens, mk_tokens![NotEqual, EOF]);
 
         tokens = read("<");
-        assert_eq!(tokens, mk_tokens![LessThan]);
+        assert_eq!(tokens, mk_tokens![LessThan, EOF]);
 
         tokens = read("<=");
-        assert_eq!(tokens, mk_tokens![LessThanEq]);
+        assert_eq!(tokens, mk_tokens![LessThanEq, EOF]);
 
         tokens = read("=");
-        assert_eq!(tokens, mk_tokens![Assignment]);
+        assert_eq!(tokens, mk_tokens![Assignment, EOF]);
 
         tokens = read("==");
-        assert_eq!(tokens, mk_tokens![Equal]);
+        assert_eq!(tokens, mk_tokens![Equal, EOF]);
 
         tokens = read(">");
-        assert_eq!(tokens, mk_tokens![GreaterThan]);
+        assert_eq!(tokens, mk_tokens![GreaterThan, EOF]);
 
         tokens = read(">=");
-        assert_eq!(tokens, mk_tokens![GreaterThanEq]);
+        assert_eq!(tokens, mk_tokens![GreaterThanEq, EOF]);
 
         tokens = read("_");
-        assert_eq!(tokens, mk_tokens![Underscore]);
+        assert_eq!(tokens, mk_tokens![Underscore, EOF]);
 
         tokens = read("_abcde");
-        assert_eq!(tokens, mk_tokens![Identifier]);
+        assert_eq!(tokens, mk_tokens![Identifier, EOF]);
 
         tokens = read("_12345");
-        assert_eq!(tokens, mk_tokens![Identifier]);
+        assert_eq!(tokens, mk_tokens![Identifier, EOF]);
 
         tokens = read("&");
         assert_eq!(
             tokens,
-            mk_tokens![Unexpected {
-                line_nr: 1,
-                col: 1,
-                symbol: '&'
-            }]
+            mk_tokens![
+                Unexpected {
+                    line_nr: 1,
+                    col: 1,
+                    symbol: '&'
+                },
+                EOF
+            ]
         );
 
         tokens = read(
@@ -372,6 +381,7 @@ mod tests {
                 Plus,
                 Comma,
                 Minus,
+                Semicolon,
                 LeftSqBracket,
                 RightSqBracket,
                 CircAccent,
@@ -394,7 +404,8 @@ mod tests {
                     col: 49,
                     symbol: '&'
                 },
-                LineComment
+                LineComment,
+                EOF
             ]
         );
 
@@ -405,20 +416,21 @@ mod tests {
                 Literal {
                     kind: LiteralKind::Str("hello".to_string())
                 },
-                UnterminatedLiteral { line_nr: 1, col: 9 }
+                UnterminatedLiteral { line_nr: 1, col: 9 },
+                EOF
             ]
         );
 
         tokens = read("\"hello\n");
         assert_eq!(
             tokens,
-            mk_tokens![UnterminatedLiteral { line_nr: 1, col: 1 }]
+            mk_tokens![UnterminatedLiteral { line_nr: 1, col: 1 }, EOF]
         );
 
         tokens = read(r###""hello"###);
         assert_eq!(
             tokens,
-            mk_tokens![UnterminatedLiteral { line_nr: 1, col: 1 }]
+            mk_tokens![UnterminatedLiteral { line_nr: 1, col: 1 }, EOF]
         );
 
         tokens = read("!true");
@@ -428,7 +440,8 @@ mod tests {
                 Not,
                 Literal {
                     kind: LiteralKind::Bool(true)
-                }
+                },
+                EOF
             ]
         )
     }

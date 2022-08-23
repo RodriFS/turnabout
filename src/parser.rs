@@ -2,7 +2,7 @@ use crate::{
     lexer::{Token, TokenType},
     utils::LiteralKind,
 };
-use std::iter::{self, Peekable};
+use std::iter::Peekable;
 
 #[derive(Debug, PartialEq)]
 pub enum BinOperator {
@@ -104,6 +104,9 @@ pub enum Expr {
         right: Box<Expr>,
     },
     Grouping(Box<Expr>),
+    Sequence(Vec<Box<Expr>>),
+    Statement(Box<Expr>),
+    Program(Box<Expr>),
     Ignore(TokenType),
 }
 
@@ -133,6 +136,21 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
         Self {
             tokens: tokens.peekable(),
         }
+    }
+
+    fn expect(&mut self, expected: TokenType) {
+        if let Some(token) = self.peek() {
+            if token.ttype != expected {
+                panic!("Token not expected")
+            }
+        }
+    }
+
+    fn check(&mut self, expected: TokenType) -> bool {
+        if let Some(token) = self.peek() {
+            return token.ttype == expected;
+        }
+        false
     }
 
     fn next(&mut self) -> Option<Token> {
@@ -218,22 +236,29 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn parse_expression(&mut self) -> Expr {
-        self.parse_binary(0)
+        let bin = self.parse_binary(0);
+        if self.check(TokenType::Semicolon) {
+            self.next();
+        }
+        Expr::Statement(Box::new(bin))
     }
 
-    pub fn parse(&'a mut self) -> impl Iterator<Item = Expr> + 'a {
-        iter::from_fn(|| {
-            if self.tokens.peek().is_some() {
-                let expr = self.parse_expression();
-                Some(expr)
-            } else {
-                None
+    pub fn parse(&mut self) -> Expr {
+        let mut exprs = vec![];
+        while let Expr::Statement(stmt) = self.parse_expression() {
+            exprs.push(stmt);
+            if self.check(TokenType::EOF) {
+                break;
             }
-        })
-        .filter(|token| match token {
-            Expr::Ignore(_) => false,
-            _ => true,
-        })
+        }
+        let expr;
+        if exprs.len() == 1 {
+            expr = Expr::Program(exprs.pop().unwrap());
+        } else {
+            expr = Expr::Program(Box::new(Expr::Sequence(exprs)));
+        }
+        self.expect(TokenType::EOF);
+        expr
     }
 }
 
@@ -243,12 +268,12 @@ mod tests {
     use crate::lexer::*;
     use crate::parser::{LiteralKind::*, *};
 
-    fn parse<'a>(buffer: &'a str) -> Vec<Expr> {
+    fn parse<'a>(buffer: &'a str) -> Expr {
         let cursor = Cursor::new(&buffer);
         let mut lexer = Lexer::new(cursor);
         let tokens = lexer.read();
         let mut parser = Parser::new(tokens.into_iter());
-        parser.parse().collect()
+        parser.parse()
     }
 
     #[test]
@@ -256,22 +281,22 @@ mod tests {
         let one = parse("!true;");
         assert_eq!(
             one,
-            vec![Expr::Unary {
+            Expr::Program(Box::new(Expr::Unary {
                 operator: UnOperator::Not,
                 right: Box::new(Expr::Literal(Bool(true))),
-            }],
+            })),
         );
 
         let two = parse("!-false;");
         assert_eq!(
             two,
-            vec![Expr::Unary {
+            Expr::Program(Box::new(Expr::Unary {
                 operator: UnOperator::Not,
                 right: Box::new(Expr::Unary {
                     operator: UnOperator::Negative,
                     right: Box::new(Expr::Literal(Bool(false)))
                 })
-            }]
+            }))
         );
     }
 
@@ -280,7 +305,7 @@ mod tests {
         let assoc = parse("1 + 2 + 3;");
         assert_eq!(
             assoc,
-            vec![Expr::Binary {
+            Expr::Program(Box::new(Expr::Binary {
                 operator: BinOperator::Plus,
                 left: Box::new(Expr::Binary {
                     operator: BinOperator::Plus,
@@ -288,13 +313,13 @@ mod tests {
                     right: Box::new(Expr::Literal(Int(2)))
                 }),
                 right: Box::new(Expr::Literal(Int(3))),
-            }]
+            }))
         );
 
         let prec1 = parse("1 * 2 + 3;");
         assert_eq!(
             prec1,
-            vec![Expr::Binary {
+            Expr::Program(Box::new(Expr::Binary {
                 operator: BinOperator::Plus,
                 left: Box::new(Expr::Binary {
                     operator: BinOperator::Asterisk,
@@ -302,13 +327,13 @@ mod tests {
                     right: Box::new(Expr::Literal(Int(2))),
                 }),
                 right: Box::new(Expr::Literal(Int(3))),
-            }]
+            }))
         );
 
         let prec2 = parse("3 + 1 * 2;");
         assert_eq!(
             prec2,
-            vec![Expr::Binary {
+            Expr::Program(Box::new(Expr::Binary {
                 operator: BinOperator::Plus,
                 left: Box::new(Expr::Literal(Int(3))),
                 right: Box::new(Expr::Binary {
@@ -316,7 +341,7 @@ mod tests {
                     left: Box::new(Expr::Literal(Int(1))),
                     right: Box::new(Expr::Literal(Int(2))),
                 }),
-            }]
+            }))
         );
     }
 }

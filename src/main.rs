@@ -25,7 +25,7 @@ impl From<str::Utf8Error> for Error {
     }
 }
 
-fn read<'a>(buffer: &str) -> Result<Vec<Expr>, String> {
+fn read<'a>(buffer: &str) -> Result<Expr, String> {
     let cursor = Cursor::new(&buffer);
     let mut lexer = Lexer::new(cursor);
     let tokens = lexer.read();
@@ -34,13 +34,13 @@ fn read<'a>(buffer: &str) -> Result<Vec<Expr>, String> {
         return Err("Lexer error".to_string());
     }
     let mut parser = Parser::new(tokens.into_iter());
-    let ast = parser.parse().collect();
+    let ast = parser.parse();
     Ok(ast)
 }
 
-fn eval(mut ast: Vec<Expr>) {
+fn eval(ast: Expr) {
     let interpreter = Interpreter::new();
-    let result = interpreter.eval(ast.pop().unwrap());
+    let result = interpreter.eval(ast);
     println!("{}", result);
 }
 

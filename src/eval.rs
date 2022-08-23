@@ -17,6 +17,7 @@ impl Interpreter {
             Expr::Literal(LiteralKind::Int(v)) => Type::Int(v),
             Expr::Literal(LiteralKind::Str(v)) => Type::Str(v),
             Expr::Literal(LiteralKind::Bool(v)) => Type::Bool(v),
+            Expr::Unit => Type::Unit,
             _ => unreachable!(),
         }
     }
@@ -56,13 +57,96 @@ impl Interpreter {
             Expr::Sequence(exprs) => self.eval_sequence(exprs),
             Expr::Statement(expr) => self.eval(*expr),
             Expr::Grouping(expr) => self.eval(*expr),
-            Expr::Unary { operator, right } => self.eval_unary(operator, *right),
             Expr::Binary {
                 operator,
                 left,
                 right,
             } => self.eval_binary(operator, *left, *right),
+            Expr::Unary { operator, right } => self.eval_unary(operator, *right),
             lit => self.eval_literal(lit),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cursor::*;
+    use crate::lexer::*;
+    use crate::parser::*;
+    use crate::types::Type::*;
+
+    fn eval<'a>(buffer: &'a str) -> Type {
+        let cursor = Cursor::new(&buffer);
+        let mut lexer = Lexer::new(cursor);
+        let tokens = lexer.read();
+        let mut parser = Parser::new(tokens.into_iter());
+        let ast = parser.parse();
+        let interpreter = Interpreter::new();
+        interpreter.eval(ast)
+    }
+
+    #[test]
+    fn test_literal() {
+        let int = eval("1");
+        assert_eq!(int, Int(1));
+
+        let float = eval("1.1");
+        assert_eq!(float, Float(1.1));
+
+        let boolean = eval("true");
+        assert_eq!(boolean, Bool(true));
+
+        let string = eval("\"hello world\"");
+        assert_eq!(string, Str("hello world".to_string()));
+    }
+
+    #[test]
+    fn test_unary() {
+        let not = eval("!true");
+        assert_eq!(not, Bool(false));
+
+        let not_not = eval("!!true");
+        assert_eq!(not_not, Bool(true));
+
+        let mut minus = eval("-4");
+        assert_eq!(minus, Int(-4));
+        minus = eval("-4.1");
+        assert_eq!(minus, Float(-4.1));
+
+        let mut minus_minus = eval("--4");
+        assert_eq!(minus_minus, Int(4));
+        minus_minus = eval("--4.1");
+        assert_eq!(minus_minus, Float(4.1));
+    }
+
+    #[test]
+    fn test_binary_sum() {
+        let mut sum = eval("1 + 1");
+        assert_eq!(sum, Int(2));
+        sum = eval("1.1 + 1");
+        assert_eq!(sum, Float(2.1));
+        sum = eval("1 + 1.1");
+        assert_eq!(sum, Float(2.1));
+        sum = eval("1.1 + 1.1");
+        assert_eq!(sum, Float(2.2));
+        sum = eval("\"hello\" + 1");
+        assert_eq!(sum, Str("hello1".to_string()));
+        sum = eval("\"hello\" + 1.1");
+        assert_eq!(sum, Str("hello1.1".to_string()));
+        sum = eval("\"hello\" + true");
+        assert_eq!(sum, Str("hellotrue".to_string()));
+        sum = eval("\"hello\" + \"world\"");
+        assert_eq!(sum, Str("helloworld".to_string()));
+        sum = eval("\"hello\" + (1.1 + true)");
+        assert_eq!(sum, Str("helloNaN".to_string()));
+        sum = eval("\"hello\" + ()");
+        assert_eq!(sum, Str("hello()".to_string()));
+    }
+
+    #[test]
+    fn test_sequence() {
+        let result = eval("1+2; 2+2");
+        assert_eq!(result, Int(4));
     }
 }

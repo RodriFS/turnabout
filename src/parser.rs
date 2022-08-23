@@ -107,6 +107,7 @@ pub enum Expr {
     Sequence(Vec<Box<Expr>>),
     Statement(Box<Expr>),
     Program(Box<Expr>),
+    Unit,
     Ignore(TokenType),
 }
 
@@ -161,18 +162,6 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
         self.tokens.peek()
     }
 
-    fn parse_while<P>(&mut self, predicate: P)
-    where
-        P: Fn(&TokenType) -> bool,
-    {
-        while match self.tokens.peek() {
-            Some(t) => predicate(&t.ttype),
-            None => false,
-        } {
-            self.tokens.next();
-        }
-    }
-
     fn peek_un_operator(&mut self) -> Option<UnOperator> {
         self.peek().and_then(|t| convert_un_operator(&t.ttype))
     }
@@ -193,8 +182,14 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
             Some(Token {
                 ttype: TokenType::LeftParen,
             }) => {
+                if self.check(TokenType::RightParen) {
+                    self.next();
+                    return Expr::Unit;
+                }
                 let expr = self.parse_expression();
-                self.parse_while(|t| t == &TokenType::RightParen);
+                dbg!(&expr);
+                self.expect(TokenType::RightParen);
+                self.next();
                 Expr::Grouping(Box::new(expr))
             }
             Some(Token { ttype: rest }) => Expr::Ignore(rest),

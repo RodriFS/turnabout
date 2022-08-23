@@ -50,7 +50,10 @@ impl Add for Type {
                 Type::Str(rhs) => Type::Str(format!("{}{}", lhs, rhs)),
                 _ => unreachable!(),
             },
-            _ => Type::NaN,
+            lhsi_type => match other {
+                Type::Str(rhs) => Type::Str(format!("{}{}", lhsi_type.to_string(), rhs)),
+                _ => Type::NaN,
+            },
         }
     }
 }

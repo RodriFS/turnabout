@@ -27,6 +27,22 @@ impl Type {
             Type::Unit => Type::Str("()".to_string()),
         }
     }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Type::Int(_) => "Int",
+            Type::Float(_) => "Float",
+            Type::Bool(_) => "Bool",
+            Type::NaN => "NaN",
+            Type::Str(_) => "String",
+            Type::Unit => "Unit",
+        }
+    }
+
+    // For testing equality of enum variant, since Type implements PartialEq
+    pub fn dbg(&self) -> String {
+        format!("{:?}", self)
+    }
 }
 
 impl Add for Type {
@@ -52,7 +68,7 @@ impl Add for Type {
             },
             lhsi_type => match other {
                 Type::Str(rhs) => Type::Str(format!("{}{}", lhsi_type.to_string(), rhs)),
-                _ => Type::NaN,
+                _ => panic!("You can only add numbers"),
             },
         }
     }
@@ -66,14 +82,18 @@ impl Sub for Type {
             Type::Int(lhs) => match other {
                 Type::Int(rhs) => Type::Int(lhs - rhs),
                 Type::Float(rhs) => Type::Float(lhs as f64 - rhs),
-                _ => Type::NaN,
+                t => panic!("Can't cast {} into Int", t.name()),
             },
             Type::Float(lhs) => match other {
                 Type::Float(rhs) => Type::Float(lhs - rhs),
                 Type::Int(rhs) => Type::Float(lhs - rhs as f64),
-                _ => Type::NaN,
+                t => panic!("Can't cast {} into Float", t.name()),
             },
-            _ => Type::NaN,
+            _ => match other {
+                Type::Int(_) => panic!("Can't cast {} into Int", self.name()),
+                Type::Float(_) => panic!("Can't cast {} into Float", self.name()),
+                _ => panic!("You can only subtract numbers"),
+            },
         }
     }
 }
@@ -86,14 +106,18 @@ impl Mul for Type {
             Type::Int(lhs) => match other {
                 Type::Int(rhs) => Type::Int(lhs * rhs),
                 Type::Float(rhs) => Type::Float(lhs as f64 * rhs),
-                _ => Type::NaN,
+                t => panic!("Can't cast {} into Int", t.name()),
             },
             Type::Float(lhs) => match other {
                 Type::Float(rhs) => Type::Float(lhs * rhs),
                 Type::Int(rhs) => Type::Float(lhs * rhs as f64),
-                _ => Type::NaN,
+                t => panic!("Can't cast {} into Float", t.name()),
             },
-            _ => Type::NaN,
+            _ => match other {
+                Type::Int(_) => panic!("Can't cast {} into Int", self.name()),
+                Type::Float(_) => panic!("Can't cast {} into Float", self.name()),
+                _ => panic!("You can only multiply numbers"),
+            },
         }
     }
 }
@@ -106,14 +130,18 @@ impl Div for Type {
             Type::Int(lhs) => match other {
                 Type::Int(rhs) => Type::Float(lhs as f64 / rhs as f64),
                 Type::Float(rhs) => Type::Float(lhs as f64 / rhs),
-                _ => Type::NaN,
+                t => panic!("Can't cast {} into Int", t.name()),
             },
             Type::Float(lhs) => match other {
                 Type::Float(rhs) => Type::Float(lhs / rhs),
                 Type::Int(rhs) => Type::Float(lhs / rhs as f64),
-                _ => Type::NaN,
+                t => panic!("Can't cast {} into Float", t.name()),
             },
-            _ => Type::NaN,
+            _ => match other {
+                Type::Int(_) => panic!("Can't cast {} into Int", self.name()),
+                Type::Float(_) => panic!("Can't cast {} into Float", self.name()),
+                _ => panic!("You can only divide numbers"),
+            },
         }
     }
 }

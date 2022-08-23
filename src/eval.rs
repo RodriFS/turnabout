@@ -123,13 +123,13 @@ mod tests {
     #[test]
     fn test_binary_sum() {
         let mut sum = eval("1 + 1");
-        assert_eq!(sum, Int(2));
+        assert_eq!(sum.dbg(), Int(2).dbg());
         sum = eval("1.1 + 1");
-        assert_eq!(sum, Float(2.1));
+        assert_eq!(sum.dbg(), Float(2.1).dbg());
         sum = eval("1 + 1.1");
-        assert_eq!(sum, Float(2.1));
+        assert_eq!(sum.dbg(), Float(2.1).dbg());
         sum = eval("1.1 + 1.1");
-        assert_eq!(sum, Float(2.2));
+        assert_eq!(sum.dbg(), Float(2.2).dbg());
         sum = eval("\"hello\" + 1");
         assert_eq!(sum, Str("hello1".to_string()));
         sum = eval("\"hello\" + 1.1");
@@ -142,6 +142,52 @@ mod tests {
         assert_eq!(sum, Str("helloNaN".to_string()));
         sum = eval("\"hello\" + ()");
         assert_eq!(sum, Str("hello()".to_string()));
+        sum = eval("1 + \"hello\"");
+        assert_eq!(sum, Str("1hello".to_string()));
+        sum = eval("1.1 + \"hello\"");
+        assert_eq!(sum, Str("1.1hello".to_string()));
+        sum = eval("true + \"hello\"");
+        assert_eq!(sum, Str("truehello".to_string()));
+        sum = eval("(1.1 + true) + \"hello\"");
+        assert_eq!(sum, Str("NaNhello".to_string()));
+        sum = eval("() + \"hello\"");
+        assert_eq!(sum, Str("()hello".to_string()));
+    }
+
+    #[test]
+    fn test_binary_sub() {
+        let mut sub = eval("2 - 1");
+        assert_eq!(sub.dbg(), Int(1).dbg());
+        sub = eval("2 - 1.2");
+        assert_eq!(sub.dbg(), Float(0.8).dbg());
+        sub = eval("2.1 - 1.0");
+        assert_eq!(sub.dbg(), Float(1.1).dbg());
+        sub = eval("2.2 - 1.1");
+        assert_eq!(sub.dbg(), Float(1.1).dbg())
+    }
+
+    #[test]
+    fn test_binary_mul() {
+        let mut mul = eval("4 * 2");
+        assert_eq!(mul.dbg(), Int(8).dbg());
+        mul = eval("2 * 1.5");
+        assert_eq!(mul.dbg(), Float(3.0).dbg());
+        mul = eval("2.5 * 2");
+        assert_eq!(mul.dbg(), Float(5.0).dbg());
+        mul = eval("2.2 * 2.0");
+        assert_eq!(mul.dbg(), Float(4.4).dbg())
+    }
+
+    #[test]
+    fn test_binary_div() {
+        let mut div = eval("4 / 2");
+        assert_eq!(div.dbg(), Float(2.0).dbg());
+        div = eval("3 / 1.5");
+        assert_eq!(div.dbg(), Float(2.0).dbg());
+        div = eval("2.5 / 2");
+        assert_eq!(div.dbg(), Float(1.25).dbg());
+        div = eval("2.2 / 2.0");
+        assert_eq!(div.dbg(), Float(1.1).dbg())
     }
 
     #[test]

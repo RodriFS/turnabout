@@ -187,7 +187,6 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
                     return Expr::Unit;
                 }
                 let expr = self.parse_expression();
-                dbg!(&expr);
                 self.expect(TokenType::RightParen);
                 self.next();
                 Expr::Grouping(Box::new(expr))

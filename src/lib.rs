@@ -1,4 +1,5 @@
 pub mod cursor;
+pub mod display;
 pub mod error_reporting;
 pub mod eval;
 pub mod lexer;

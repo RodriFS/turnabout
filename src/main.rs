@@ -35,14 +35,13 @@ fn read<'a>(buffer: &str) -> Result<Vec<Expr>, String> {
     }
     let mut parser = Parser::new(tokens.into_iter());
     let ast = parser.parse().collect();
-    println!("{:?}", &ast);
     Ok(ast)
 }
 
 fn eval(mut ast: Vec<Expr>) {
     let interpreter = Interpreter::new();
     let result = interpreter.eval(ast.pop().unwrap());
-    println!("{:?}", result);
+    println!("{}", result);
 }
 
 fn main() -> Result<(), Error> {
@@ -56,6 +55,9 @@ fn main() -> Result<(), Error> {
     loop {
         let mut buffer = String::new();
         io::stdin().read_line(&mut buffer)?;
+        if &buffer == "\n" {
+            continue;
+        }
         eval(read(&buffer).unwrap());
     }
 }

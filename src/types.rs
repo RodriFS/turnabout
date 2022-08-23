@@ -1,4 +1,7 @@
+use std::cmp::Ordering;
 use std::ops::Add;
+use std::ops::Div;
+use std::ops::Mul;
 use std::ops::Sub;
 
 #[derive(Debug)]
@@ -7,6 +10,19 @@ pub enum Type {
     Float(f64),
     Str(String),
     Bool(bool),
+    NaN,
+}
+
+impl Type {
+    pub fn to_type_string(&self) -> Type {
+        match self {
+            Type::Int(v) => Type::Str(v.to_string()),
+            Type::Float(v) => Type::Str(v.to_string()),
+            Type::Bool(v) => Type::Str(v.to_string()),
+            Type::NaN => Type::Str("NaN".to_string()),
+            Type::Str(v) => Type::Str(v.to_string()),
+        }
+    }
 }
 
 impl Add for Type {
@@ -17,14 +33,20 @@ impl Add for Type {
             Type::Int(lhs) => match other {
                 Type::Int(rhs) => Type::Int(lhs + rhs),
                 Type::Float(rhs) => Type::Float(lhs as f64 + rhs),
-                _ => panic!("No implicit castings"),
+                Type::Str(rhs) => Type::Str(format!("{}{}", lhs, rhs)),
+                _ => Type::NaN,
             },
             Type::Float(lhs) => match other {
                 Type::Float(rhs) => Type::Float(lhs + rhs),
                 Type::Int(rhs) => Type::Float(lhs + rhs as f64),
-                _ => panic!("No implicit castings"),
+                Type::Str(rhs) => Type::Str(format!("{}{}", lhs, rhs)),
+                _ => Type::NaN,
             },
-            _ => unimplemented!(),
+            Type::Str(lhs) => match other.to_type_string() {
+                Type::Str(rhs) => Type::Str(format!("{}{}", lhs, rhs)),
+                _ => unreachable!(),
+            },
+            _ => Type::NaN,
         }
     }
 }
@@ -37,14 +59,113 @@ impl Sub for Type {
             Type::Int(lhs) => match other {
                 Type::Int(rhs) => Type::Int(lhs - rhs),
                 Type::Float(rhs) => Type::Float(lhs as f64 - rhs),
-                _ => panic!("No implicit castings"),
+                _ => Type::NaN,
             },
             Type::Float(lhs) => match other {
                 Type::Float(rhs) => Type::Float(lhs - rhs),
                 Type::Int(rhs) => Type::Float(lhs - rhs as f64),
-                _ => panic!("No implicit castings"),
+                _ => Type::NaN,
             },
-            _ => unimplemented!(),
+            _ => Type::NaN,
+        }
+    }
+}
+
+impl Mul for Type {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self::Output {
+        match self {
+            Type::Int(lhs) => match other {
+                Type::Int(rhs) => Type::Int(lhs * rhs),
+                Type::Float(rhs) => Type::Float(lhs as f64 * rhs),
+                _ => Type::NaN,
+            },
+            Type::Float(lhs) => match other {
+                Type::Float(rhs) => Type::Float(lhs * rhs),
+                Type::Int(rhs) => Type::Float(lhs * rhs as f64),
+                _ => Type::NaN,
+            },
+            _ => Type::NaN,
+        }
+    }
+}
+
+impl Div for Type {
+    type Output = Self;
+
+    fn div(self, other: Self) -> Self::Output {
+        match self {
+            Type::Int(lhs) => match other {
+                Type::Int(rhs) => Type::Float(lhs as f64 / rhs as f64),
+                Type::Float(rhs) => Type::Float(lhs as f64 / rhs),
+                _ => Type::NaN,
+            },
+            Type::Float(lhs) => match other {
+                Type::Float(rhs) => Type::Float(lhs / rhs),
+                Type::Int(rhs) => Type::Float(lhs / rhs as f64),
+                _ => Type::NaN,
+            },
+            _ => Type::NaN,
+        }
+    }
+}
+
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            Type::Int(lhs) => match other {
+                Type::Int(rhs) => lhs == rhs,
+                Type::Float(rhs) => *lhs as f64 == *rhs,
+                _ => false,
+            },
+            Type::Float(lhs) => match other {
+                Type::Int(rhs) => *lhs == *rhs as f64,
+                Type::Float(rhs) => lhs == rhs,
+                _ => false,
+            },
+            Type::NaN => match other {
+                Type::NaN => true,
+                _ => false,
+            },
+            Type::Str(lhs) => match other {
+                Type::Str(rhs) => lhs == rhs,
+                _ => false,
+            },
+            Type::Bool(lhs) => match other {
+                Type::Bool(rhs) => lhs == rhs,
+                _ => false,
+            },
+        }
+    }
+
+    fn ne(&self, other: &Self) -> bool {
+        !self.eq(other)
+    }
+}
+
+impl PartialOrd for Type {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match self {
+            Type::Int(lhs) => match other {
+                Type::Int(rhs) => lhs.partial_cmp(rhs),
+                Type::Float(rhs) => (*lhs as f64).partial_cmp(rhs),
+                _ => None,
+            },
+            Type::Float(lhs) => match other {
+                Type::Int(rhs) => lhs.partial_cmp(&(*rhs as f64)),
+                Type::Float(rhs) => lhs.partial_cmp(rhs),
+                _ => None,
+            },
+            Type::Str(lhs) => match other {
+                Type::Str(rhs) => lhs.partial_cmp(rhs),
+                _ => None,
+            },
+            Type::Bool(lhs) => match other {
+                Type::Bool(rhs) => lhs.partial_cmp(rhs),
+                _ => None,
+            },
+            Type::NaN => None,
         }
     }
 }

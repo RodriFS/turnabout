@@ -41,7 +41,10 @@ fn read<'a>(buffer: &str) -> Result<Expr, String> {
 fn eval(ast: Expr) {
     let interpreter = Interpreter::new();
     let result = interpreter.eval(ast);
-    println!("{}", result);
+    match result {
+        Ok(t) => println!("{}", t),
+        Err(e) => println!("{}", e),
+    }
 }
 
 fn main() -> Result<(), Error> {

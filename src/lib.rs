@@ -1,6 +1,7 @@
 pub mod cursor;
 pub mod display;
 pub mod error_reporting;
+pub mod errors;
 pub mod eval;
 pub mod lexer;
 pub mod parser;

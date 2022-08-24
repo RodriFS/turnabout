@@ -1,4 +1,5 @@
 use crate::{
+    errors::Error,
     parser::{BinOperator, Expr, UnOperator},
     types::Type,
     utils::LiteralKind,
@@ -11,59 +12,66 @@ impl Interpreter {
         Self {}
     }
 
-    fn eval_literal(&self, expr: Expr) -> Type {
+    fn eval_literal(&self, expr: Expr) -> Result<Type, Error> {
         match expr {
-            Expr::Literal(LiteralKind::Float(v)) => Type::Float(v),
-            Expr::Literal(LiteralKind::Int(v)) => Type::Int(v),
-            Expr::Literal(LiteralKind::Str(v)) => Type::Str(v),
-            Expr::Literal(LiteralKind::Bool(v)) => Type::Bool(v),
-            Expr::Unit => Type::Unit,
+            Expr::Literal(LiteralKind::Float(v)) => Ok(Type::Float(v)),
+            Expr::Literal(LiteralKind::Int(v)) => Ok(Type::Int(v)),
+            Expr::Literal(LiteralKind::Str(v)) => Ok(Type::Str(v)),
+            Expr::Literal(LiteralKind::Bool(v)) => Ok(Type::Bool(v)),
+            Expr::Unit => Ok(Type::Unit),
             _ => unreachable!(),
         }
     }
 
-    fn eval_unary(&self, op: UnOperator, right: Expr) -> Type {
+    fn eval_unary(&self, op: UnOperator, right: Expr) -> Result<Type, Error> {
+        // Check why ? not working
         match op {
-            UnOperator::Not => !self.eval(right),
-            UnOperator::Negative => -self.eval(right),
+            UnOperator::Not => match self.eval(right) {
+                Ok(v) => !v,
+                Err(e) => Err(e),
+            },
+            UnOperator::Negative => match self.eval(right) {
+                Ok(v) => -v,
+                Err(e) => Err(e),
+            },
         }
     }
 
-    fn eval_binary(&self, op: BinOperator, left: Expr, right: Expr) -> Type {
+    fn eval_binary(&self, op: BinOperator, left: Expr, right: Expr) -> Result<Type, Error> {
         match op {
-            BinOperator::Plus => self.eval(left) + self.eval(right),
-            BinOperator::Minus => self.eval(left) - self.eval(right),
-            BinOperator::Asterisk => self.eval(left) * self.eval(right),
-            BinOperator::Slash => self.eval(left) / self.eval(right),
-            BinOperator::GreaterThan => Type::Bool(self.eval(left) > self.eval(right)),
-            BinOperator::GreaterThanEq => Type::Bool(self.eval(left) >= self.eval(right)),
-            BinOperator::LessThan => Type::Bool(self.eval(left) < self.eval(right)),
-            BinOperator::LessThanEq => Type::Bool(self.eval(left) <= self.eval(right)),
-            BinOperator::Equal => Type::Bool(self.eval(left) == self.eval(right)),
-            BinOperator::NotEqual => Type::Bool(self.eval(left) != self.eval(right)),
+            BinOperator::Plus => self.eval(left)? + self.eval(right)?,
+            BinOperator::Minus => self.eval(left)? - self.eval(right)?,
+            BinOperator::Asterisk => self.eval(left)? * self.eval(right)?,
+            BinOperator::Slash => self.eval(left)? / self.eval(right)?,
+            BinOperator::GreaterThan => Ok(Type::Bool(self.eval(left)? > self.eval(right)?)),
+            BinOperator::GreaterThanEq => Ok(Type::Bool(self.eval(left)? >= self.eval(right)?)),
+            BinOperator::LessThan => Ok(Type::Bool(self.eval(left)? < self.eval(right)?)),
+            BinOperator::LessThanEq => Ok(Type::Bool(self.eval(left)? <= self.eval(right)?)),
+            BinOperator::Equal => Ok(Type::Bool(self.eval(left)? == self.eval(right)?)),
+            BinOperator::NotEqual => Ok(Type::Bool(self.eval(left)? != self.eval(right)?)),
             _ => unimplemented!(),
         }
     }
 
-    fn eval_sequence(&self, exprs: Vec<Box<Expr>>) -> Type {
+    fn eval_sequence(&self, exprs: Vec<Box<Expr>>) -> Result<Type, Error> {
         exprs
             .into_iter()
-            .fold(Type::Unit, |_, expr| self.eval(*expr))
+            .fold(Ok(Type::Unit), |_, expr| self.eval(*expr))
     }
 
-    pub fn eval(&self, expr: Expr) -> Type {
+    pub fn eval(&self, expr: Expr) -> Result<Type, Error> {
         match expr {
             Expr::Program(expr) => self.eval(*expr),
             Expr::Sequence(exprs) => self.eval_sequence(exprs),
-            Expr::Statement(expr) => self.eval(*expr),
             Expr::Grouping(expr) => self.eval(*expr),
+            Expr::Statement(expr) => self.eval(*expr),
             Expr::Binary {
                 operator,
                 left,
                 right,
             } => self.eval_binary(operator, *left, *right),
             Expr::Unary { operator, right } => self.eval_unary(operator, *right),
-            lit => self.eval_literal(lit),
+            literal => self.eval_literal(literal),
         }
     }
 }
@@ -83,7 +91,7 @@ mod tests {
         let mut parser = Parser::new(tokens.into_iter());
         let ast = parser.parse();
         let interpreter = Interpreter::new();
-        interpreter.eval(ast)
+        interpreter.eval(ast).unwrap()
     }
 
     #[test]
@@ -188,6 +196,22 @@ mod tests {
         assert_eq!(div.dbg(), Float(1.25).dbg());
         div = eval("2.2 / 2.0");
         assert_eq!(div.dbg(), Float(1.1).dbg())
+    }
+
+    #[test]
+    fn test_grouping() {
+        let mut group = eval("(1 + 2)");
+        assert_eq!(group, Int(3));
+        group = eval("(1 + 2) * 3");
+        assert_eq!(group, Int(9));
+        group = eval("3 * (1 + 2)");
+        assert_eq!(group, Int(9));
+        group = eval("1 + (2 * 3) + 4");
+        assert_eq!(group, Int(11));
+        group = eval("2 * (1 + (3 * 4)) * (10)");
+        assert_eq!(group, Int(260));
+        group = eval("-(-10)");
+        assert_eq!(group, Int(10));
     }
 
     #[test]

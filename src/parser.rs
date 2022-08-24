@@ -192,7 +192,7 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
                 Expr::Grouping(Box::new(expr))
             }
             Some(Token { ttype: rest }) => Expr::Ignore(rest),
-            None => panic!("Unknown Error"),
+            None => unreachable!("Eof token not found"),
         }
     }
 

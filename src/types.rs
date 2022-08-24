@@ -6,6 +6,8 @@ use std::ops::Neg;
 use std::ops::Not;
 use std::ops::Sub;
 
+use crate::errors::Error;
+
 #[derive(Debug)]
 pub enum Type {
     Int(i64),
@@ -28,7 +30,7 @@ impl Type {
         }
     }
 
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &'static str {
         match self {
             Type::Int(_) => "Int",
             Type::Float(_) => "Float",
@@ -46,125 +48,127 @@ impl Type {
 }
 
 impl Add for Type {
-    type Output = Self;
+    type Output = Result<Self, Error>;
 
     fn add(self, other: Self) -> Self::Output {
         match self {
             Type::Int(lhs) => match other {
-                Type::Int(rhs) => Type::Int(lhs + rhs),
-                Type::Float(rhs) => Type::Float(lhs as f64 + rhs),
-                Type::Str(rhs) => Type::Str(format!("{}{}", lhs, rhs)),
-                _ => Type::NaN,
+                Type::Int(rhs) => Ok(Type::Int(lhs + rhs)),
+                Type::Float(rhs) => Ok(Type::Float(lhs as f64 + rhs)),
+                Type::Str(rhs) => Ok(Type::Str(format!("{}{}", lhs, rhs))),
+                _ => Ok(Type::NaN),
             },
             Type::Float(lhs) => match other {
-                Type::Float(rhs) => Type::Float(lhs + rhs),
-                Type::Int(rhs) => Type::Float(lhs + rhs as f64),
-                Type::Str(rhs) => Type::Str(format!("{}{}", lhs, rhs)),
-                _ => Type::NaN,
+                Type::Float(rhs) => Ok(Type::Float(lhs + rhs)),
+                Type::Int(rhs) => Ok(Type::Float(lhs + rhs as f64)),
+                Type::Str(rhs) => Ok(Type::Str(format!("{}{}", lhs, rhs))),
+                _ => Ok(Type::NaN),
             },
             Type::Str(lhs) => match other.to_type_string() {
-                Type::Str(rhs) => Type::Str(format!("{}{}", lhs, rhs)),
+                Type::Str(rhs) => Ok(Type::Str(format!("{}{}", lhs, rhs))),
                 _ => unreachable!(),
             },
             lhsi_type => match other {
-                Type::Str(rhs) => Type::Str(format!("{}{}", lhsi_type.to_string(), rhs)),
-                _ => panic!("You can only add numbers"),
+                Type::Str(rhs) => Ok(Type::Str(format!("{}{}", lhsi_type.to_string(), rhs))),
+                Type::Int(_) => Err(Error::TypeError("Can't cast Type into Int")),
+                Type::Float(_) => Err(Error::TypeError("Can't cast Type into Float")),
+                _ => Err(Error::TypeError("You can only add numbers")),
             },
         }
     }
 }
 
 impl Sub for Type {
-    type Output = Self;
+    type Output = Result<Self, Error>;
 
     fn sub(self, other: Self) -> Self::Output {
         match self {
             Type::Int(lhs) => match other {
-                Type::Int(rhs) => Type::Int(lhs - rhs),
-                Type::Float(rhs) => Type::Float(lhs as f64 - rhs),
-                t => panic!("Can't cast {} into Int", t.name()),
+                Type::Int(rhs) => Ok(Type::Int(lhs - rhs)),
+                Type::Float(rhs) => Ok(Type::Float(lhs as f64 - rhs)),
+                _ => Err(Error::TypeError("Can't cast Type into Int")),
             },
             Type::Float(lhs) => match other {
-                Type::Float(rhs) => Type::Float(lhs - rhs),
-                Type::Int(rhs) => Type::Float(lhs - rhs as f64),
-                t => panic!("Can't cast {} into Float", t.name()),
+                Type::Float(rhs) => Ok(Type::Float(lhs - rhs)),
+                Type::Int(rhs) => Ok(Type::Float(lhs - rhs as f64)),
+                _ => Err(Error::TypeError("Can't cast Type into Float")),
             },
             _ => match other {
-                Type::Int(_) => panic!("Can't cast {} into Int", self.name()),
-                Type::Float(_) => panic!("Can't cast {} into Float", self.name()),
-                _ => panic!("You can only subtract numbers"),
+                Type::Int(_) => Err(Error::TypeError("Can't cast Type into Int")),
+                Type::Float(_) => Err(Error::TypeError("Can't cast Type into Float")),
+                _ => Err(Error::TypeError("You can only subtract numbers")),
             },
         }
     }
 }
 
 impl Mul for Type {
-    type Output = Self;
+    type Output = Result<Self, Error>;
 
     fn mul(self, other: Self) -> Self::Output {
         match self {
             Type::Int(lhs) => match other {
-                Type::Int(rhs) => Type::Int(lhs * rhs),
-                Type::Float(rhs) => Type::Float(lhs as f64 * rhs),
-                t => panic!("Can't cast {} into Int", t.name()),
+                Type::Int(rhs) => Ok(Type::Int(lhs * rhs)),
+                Type::Float(rhs) => Ok(Type::Float(lhs as f64 * rhs)),
+                _ => Err(Error::TypeError("Can't cast Type into Int")),
             },
             Type::Float(lhs) => match other {
-                Type::Float(rhs) => Type::Float(lhs * rhs),
-                Type::Int(rhs) => Type::Float(lhs * rhs as f64),
-                t => panic!("Can't cast {} into Float", t.name()),
+                Type::Float(rhs) => Ok(Type::Float(lhs * rhs)),
+                Type::Int(rhs) => Ok(Type::Float(lhs * rhs as f64)),
+                _ => Err(Error::TypeError("Can't cast Type into Float")),
             },
             _ => match other {
-                Type::Int(_) => panic!("Can't cast {} into Int", self.name()),
-                Type::Float(_) => panic!("Can't cast {} into Float", self.name()),
-                _ => panic!("You can only multiply numbers"),
+                Type::Int(_) => Err(Error::TypeError("Can't cast Type into Int")),
+                Type::Float(_) => Err(Error::TypeError("Can't cast Type into Float")),
+                _ => Err(Error::TypeError("You can only multiply numbers")),
             },
         }
     }
 }
 
 impl Div for Type {
-    type Output = Self;
+    type Output = Result<Self, Error>;
 
     fn div(self, other: Self) -> Self::Output {
         match self {
             Type::Int(lhs) => match other {
-                Type::Int(rhs) => Type::Float(lhs as f64 / rhs as f64),
-                Type::Float(rhs) => Type::Float(lhs as f64 / rhs),
-                t => panic!("Can't cast {} into Int", t.name()),
+                Type::Int(rhs) => Ok(Type::Float(lhs as f64 / rhs as f64)),
+                Type::Float(rhs) => Ok(Type::Float(lhs as f64 / rhs)),
+                _ => Err(Error::TypeError("Can't cast Type into Int")),
             },
             Type::Float(lhs) => match other {
-                Type::Float(rhs) => Type::Float(lhs / rhs),
-                Type::Int(rhs) => Type::Float(lhs / rhs as f64),
-                t => panic!("Can't cast {} into Float", t.name()),
+                Type::Float(rhs) => Ok(Type::Float(lhs / rhs)),
+                Type::Int(rhs) => Ok(Type::Float(lhs / rhs as f64)),
+                _ => Err(Error::TypeError("Can't cast Type into Float")),
             },
             _ => match other {
-                Type::Int(_) => panic!("Can't cast {} into Int", self.name()),
-                Type::Float(_) => panic!("Can't cast {} into Float", self.name()),
-                _ => panic!("You can only divide numbers"),
+                Type::Int(_) => Err(Error::TypeError("Can't cast Type into Int")),
+                Type::Float(_) => Err(Error::TypeError("Can't cast Type into Float")),
+                _ => Err(Error::TypeError("You can only divide numbers")),
             },
         }
     }
 }
 
 impl Not for Type {
-    type Output = Self;
+    type Output = Result<Self, Error>;
 
     fn not(self) -> Self::Output {
         match self {
-            Type::Bool(v) => Type::Bool(!v),
-            _ => panic!("Not a binary type"),
+            Type::Bool(v) => Ok(Type::Bool(!v)),
+            _ => Err(Error::TypeError("Not a binary type")),
         }
     }
 }
 
 impl Neg for Type {
-    type Output = Self;
+    type Output = Result<Self, Error>;
 
     fn neg(self) -> Self::Output {
         match self {
-            Type::Int(v) => Type::Int(-v),
-            Type::Float(v) => Type::Float(-v),
-            _ => panic!("Can't negate a type that is not a number"),
+            Type::Int(v) => Ok(Type::Int(-v)),
+            Type::Float(v) => Ok(Type::Float(-v)),
+            _ => Err(Error::TypeError("Can't negate a type that is not a number")),
         }
     }
 }

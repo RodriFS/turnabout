@@ -1,6 +1,6 @@
 use crate::{
     lexer::{Token, TokenType},
-    utils::LiteralKind,
+    utils::{IdentifierKind, LiteralKind},
 };
 use std::iter::Peekable;
 
@@ -90,9 +90,9 @@ pub enum Expr {
         args: Box<Expr>,
     },
     If {
-        cond: Box<Expr>,
-        then: Box<Expr>,
-        els: Option<Box<Expr>>,
+        pred: Box<Expr>,
+        ant: Box<Expr>,
+        cons: Option<Box<Expr>>,
     },
     Unary {
         operator: UnOperator,
@@ -105,7 +105,7 @@ pub enum Expr {
     },
     Grouping(Box<Expr>),
     Sequence(Vec<Box<Expr>>),
-    Statement(Box<Expr>),
+    Expression(Box<Expr>),
     Program(Box<Expr>),
     Unit,
     Ignore(TokenType),
@@ -142,7 +142,7 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
     fn expect(&mut self, expected: TokenType) {
         if let Some(token) = self.peek() {
             if token.ttype != expected {
-                panic!("Token not expected")
+                panic!("Token not expected: {:?}", token.ttype)
             }
         }
     }
@@ -229,18 +229,48 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
         left
     }
 
-    fn parse_expression(&mut self) -> Expr {
-        let bin = self.parse_binary(0);
-        if self.check(TokenType::Semicolon) {
+    fn parse_if(&mut self) -> Expr {
+        self.next();
+        let predicate = self.parse_expression();
+        let antecedent = self.parse_expression();
+        let consequent = if self.check(TokenType::Identifier {
+            kind: IdentifierKind::Else,
+        }) {
             self.next();
+            Some(Box::new(self.parse_expression()))
+        } else {
+            None
+        };
+
+        Expr::If {
+            pred: Box::new(predicate),
+            ant: Box::new(antecedent),
+            cons: consequent,
         }
-        Expr::Statement(Box::new(bin))
+    }
+
+    fn parse_expression(&mut self) -> Expr {
+        let token = self.peek().expect("EOF token not found");
+        let expr = match token.ttype {
+            TokenType::Identifier {
+                kind: IdentifierKind::If,
+            } => self.parse_if(),
+            _ => {
+                let bin = self.parse_binary(0);
+                if self.check(TokenType::Semicolon) {
+                    self.next();
+                }
+                bin
+            }
+        };
+
+        Expr::Expression(Box::new(expr))
     }
 
     pub fn parse(&mut self) -> Expr {
         let mut exprs = vec![];
-        while let Expr::Statement(stmt) = self.parse_expression() {
-            exprs.push(stmt);
+        while let Expr::Expression(expr) = self.parse_expression() {
+            exprs.push(expr);
             if self.check(TokenType::EOF) {
                 break;
             }

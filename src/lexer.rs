@@ -1,4 +1,7 @@
-use crate::{cursor::Cursor, utils::LiteralKind};
+use crate::{
+    cursor::Cursor,
+    utils::{IdentifierKind, LiteralKind},
+};
 
 use self::TokenType::*;
 use std::iter;
@@ -18,7 +21,9 @@ impl Token {
 pub enum TokenType {
     Whitespace,
     LineBreak,
-    Identifier,
+    Identifier {
+        kind: IdentifierKind,
+    },
     Literal {
         kind: LiteralKind,
     },
@@ -102,8 +107,15 @@ impl<'a> Lexer<'a> {
             "false" => Literal {
                 kind: LiteralKind::Bool(false),
             },
-            // TODO separate identifiers from keywords and store them in the enum
-            _ => Identifier,
+            "if" => Identifier {
+                kind: IdentifierKind::If,
+            },
+            "else" => Identifier {
+                kind: IdentifierKind::Else,
+            },
+            v => Identifier {
+                kind: IdentifierKind::Raw(v.to_string()),
+            },
         }
     }
 
@@ -243,7 +255,15 @@ mod tests {
         assert_eq!(tokens, mk_tokens![EOF]);
 
         tokens = read("abcde");
-        assert_eq!(tokens, mk_tokens![Identifier, EOF]);
+        assert_eq!(
+            tokens,
+            mk_tokens![
+                Identifier {
+                    kind: IdentifierKind::Raw("abcde".to_string())
+                },
+                EOF
+            ]
+        );
 
         tokens = read("12345");
         assert_eq!(
@@ -343,10 +363,26 @@ mod tests {
         assert_eq!(tokens, mk_tokens![Underscore, EOF]);
 
         tokens = read("_abcde");
-        assert_eq!(tokens, mk_tokens![Identifier, EOF]);
+        assert_eq!(
+            tokens,
+            mk_tokens![
+                Identifier {
+                    kind: IdentifierKind::Raw("_abcde".to_string())
+                },
+                EOF
+            ]
+        );
 
         tokens = read("_12345");
-        assert_eq!(tokens, mk_tokens![Identifier, EOF]);
+        assert_eq!(
+            tokens,
+            mk_tokens![
+                Identifier {
+                    kind: IdentifierKind::Raw("_12345".to_string())
+                },
+                EOF
+            ]
+        );
 
         tokens = read("&");
         assert_eq!(
@@ -368,7 +404,9 @@ mod tests {
         assert_eq!(
             tokens,
             mk_tokens![
-                Identifier,
+                Identifier {
+                    kind: IdentifierKind::Raw("abcde".to_string())
+                },
                 Literal {
                     kind: LiteralKind::Int(12345)
                 },
@@ -397,8 +435,12 @@ mod tests {
                 GreaterThan,
                 GreaterThanEq,
                 Underscore,
-                Identifier,
-                Identifier,
+                Identifier {
+                    kind: IdentifierKind::Raw("_abcde".to_string())
+                },
+                Identifier {
+                    kind: IdentifierKind::Raw("_12345".to_string())
+                },
                 Unexpected {
                     line_nr: 2,
                     col: 49,

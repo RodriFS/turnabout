@@ -53,6 +53,20 @@ impl Interpreter {
         }
     }
 
+    fn eval_if(&self, pred: Expr, ant: Expr, cons: Option<Expr>) -> Result<Type, Error> {
+        let predicate = self.eval(pred)?;
+        match predicate {
+            Type::Bool(true) => self.eval(ant),
+            Type::Bool(false) => match cons {
+                Some(expr) => self.eval(expr),
+                None => Ok(Type::Unit),
+            },
+            _ => Err(Error::TypeError(
+                "Predicate does not evaluate to a boolean value",
+            )),
+        }
+    }
+
     fn eval_sequence(&self, exprs: Vec<Box<Expr>>) -> Result<Type, Error> {
         exprs
             .into_iter()
@@ -64,7 +78,8 @@ impl Interpreter {
             Expr::Program(expr) => self.eval(*expr),
             Expr::Sequence(exprs) => self.eval_sequence(exprs),
             Expr::Grouping(expr) => self.eval(*expr),
-            Expr::Statement(expr) => self.eval(*expr),
+            Expr::If { pred, ant, cons } => self.eval_if(*pred, *ant, cons.map(|e| *e)),
+            Expr::Expression(expr) => self.eval(*expr),
             Expr::Binary {
                 operator,
                 left,

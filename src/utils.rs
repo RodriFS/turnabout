@@ -24,3 +24,10 @@ pub enum LiteralKind {
     Str(String),
     Bool(bool),
 }
+
+#[derive(Debug, PartialEq)]
+pub enum IdentifierKind {
+    If,
+    Else,
+    Raw(String),
+}

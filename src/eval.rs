@@ -67,7 +67,7 @@ impl Interpreter {
         }
     }
 
-    fn eval_sequence(&self, exprs: Vec<Box<Expr>>) -> Result<Type, Error> {
+    fn eval_block(&self, exprs: Vec<Box<Expr>>) -> Result<Type, Error> {
         exprs
             .into_iter()
             .fold(Ok(Type::Unit), |_, expr| self.eval(*expr))
@@ -76,7 +76,7 @@ impl Interpreter {
     pub fn eval(&self, expr: Expr) -> Result<Type, Error> {
         match expr {
             Expr::Program(expr) => self.eval(*expr),
-            Expr::Sequence(exprs) => self.eval_sequence(exprs),
+            Expr::Block(exprs) => self.eval_block(exprs),
             Expr::Grouping(expr) => self.eval(*expr),
             Expr::If { pred, ant, cons } => self.eval_if(*pred, *ant, cons.map(|e| *e)),
             Expr::Binary {
@@ -230,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sequence() {
+    fn test_block() {
         let result = eval("1+2; 2+2");
         assert_eq!(result, Int(4));
     }

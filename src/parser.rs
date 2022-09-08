@@ -104,7 +104,7 @@ pub enum Expr {
         right: Box<Expr>,
     },
     Grouping(Box<Expr>),
-    Sequence(Vec<Box<Expr>>),
+    Block(Vec<Box<Expr>>),
     Program(Box<Expr>),
     Unit,
     Ignore(TokenType),
@@ -146,9 +146,9 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
         }
     }
 
-    fn check(&mut self, expected: TokenType) -> bool {
+    fn check(&mut self, expected: &TokenType) -> bool {
         if let Some(token) = self.peek() {
-            return token.ttype == expected;
+            return &token.ttype == expected;
         }
         false
     }
@@ -181,7 +181,7 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
             Some(Token {
                 ttype: TokenType::LeftParen,
             }) => {
-                if self.check(TokenType::RightParen) {
+                if self.check(&TokenType::RightParen) {
                     self.next();
                     return Expr::Unit;
                 }
@@ -232,7 +232,7 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
         self.next();
         let predicate = self.parse_expression();
         let antecedent = self.parse_expression();
-        let consequent = if self.check(TokenType::Identifier {
+        let consequent = if self.check(&TokenType::Identifier {
             kind: IdentifierKind::Else,
         }) {
             self.next();
@@ -254,9 +254,14 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
             TokenType::Identifier {
                 kind: IdentifierKind::If,
             } => self.parse_if(),
+            TokenType::LeftCuBracket => {
+                let block = self.parse_block();
+
+                block
+            }
             _ => {
                 let bin = self.parse_binary(0);
-                if self.check(TokenType::Semicolon) {
+                if self.check(&TokenType::Semicolon) {
                     self.next();
                 }
                 bin
@@ -264,21 +269,35 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
         }
     }
 
-    pub fn parse(&mut self) -> Expr {
+    pub fn parse_while(&mut self, ttype: TokenType) -> Expr {
         let mut exprs = vec![];
         loop {
             let expr = self.parse_expression();
-            exprs.push(Box::new(expr));
-            if self.check(TokenType::EOF) {
+            exprs.push(expr);
+            if self.check(&ttype) {
+                if exprs.len() == 1 {
+                    return exprs.pop().unwrap();
+                }
                 break;
             }
         }
-        let expr;
-        if exprs.len() == 1 {
-            expr = Expr::Program(exprs.pop().unwrap());
-        } else {
-            expr = Expr::Program(Box::new(Expr::Sequence(exprs)));
-        }
+        Expr::Block(exprs.into_iter().map(Box::new).collect())
+    }
+
+    pub fn parse_block(&mut self) -> Expr {
+        self.next();
+        let expr = self.parse_while(TokenType::RightCuBracket);
+        self.next();
+        expr
+    }
+
+    pub fn parse_program(&mut self) -> Expr {
+        self.parse_while(TokenType::EOF)
+    }
+
+    pub fn parse(&mut self) -> Expr {
+        let mut expr = self.parse_program();
+        expr = Expr::Program(Box::new(expr));
         self.expect(TokenType::EOF);
         expr
     }

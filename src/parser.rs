@@ -269,13 +269,13 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
         }
     }
 
-    pub fn parse_while(&mut self, ttype: TokenType) -> Expr {
+    pub fn parse_while(&mut self, ttype: TokenType, unwrap: bool) -> Expr {
         let mut exprs = vec![];
         loop {
             let expr = self.parse_expression();
             exprs.push(expr);
             if self.check(&ttype) {
-                if exprs.len() == 1 {
+                if exprs.len() == 1 && unwrap {
                     return exprs.pop().unwrap();
                 }
                 break;
@@ -286,13 +286,13 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
 
     pub fn parse_block(&mut self) -> Expr {
         self.next();
-        let expr = self.parse_while(TokenType::RightCuBracket);
+        let expr = self.parse_while(TokenType::RightCuBracket, false);
         self.next();
         expr
     }
 
     pub fn parse_program(&mut self) -> Expr {
-        self.parse_while(TokenType::EOF)
+        self.parse_while(TokenType::EOF, true)
     }
 
     pub fn parse(&mut self) -> Expr {
@@ -407,6 +407,43 @@ mod tests {
                 ant: Box::new(Expr::Literal(Int(4))),
                 cons: Some(Box::new(Expr::Literal(Int(1))))
             }))
+        );
+    }
+
+    #[test]
+    fn test_block() {
+        let main = parse("1+1; 2+2;");
+        assert_eq!(
+            main,
+            Expr::Program(Box::new(Expr::Block(vec![
+                Box::new(Expr::Binary {
+                    operator: BinOperator::Plus,
+                    left: Box::new(Expr::Literal(Int(1))),
+                    right: Box::new(Expr::Literal(Int(1)))
+                }),
+                Box::new(Expr::Binary {
+                    operator: BinOperator::Plus,
+                    left: Box::new(Expr::Literal(Int(2))),
+                    right: Box::new(Expr::Literal(Int(2)))
+                })
+            ])))
+        );
+
+        let block = parse("{ 1+1; { 2+2; } }");
+        assert_eq!(
+            block,
+            Expr::Program(Box::new(Expr::Block(vec![
+                Box::new(Expr::Binary {
+                    operator: BinOperator::Plus,
+                    left: Box::new(Expr::Literal(Int(1))),
+                    right: Box::new(Expr::Literal(Int(1)))
+                }),
+                Box::new(Expr::Block(vec![Box::new(Expr::Binary {
+                    operator: BinOperator::Plus,
+                    left: Box::new(Expr::Literal(Int(2))),
+                    right: Box::new(Expr::Literal(Int(2)))
+                })]))
+            ])))
         );
     }
 }

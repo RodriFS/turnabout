@@ -231,8 +231,11 @@ mod tests {
 
     #[test]
     fn test_block() {
-        let result = eval("1+2; 2+2");
-        assert_eq!(result, Int(4));
+        let main = eval("1+2; 2+2");
+        assert_eq!(main, Int(4));
+
+        let block = eval("{ 1+1; { 2+2; } }");
+        assert_eq!(block, Int(4))
     }
 
     #[test]

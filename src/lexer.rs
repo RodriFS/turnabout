@@ -92,9 +92,9 @@ impl<'a> Lexer<'a> {
     where
         F: Fn(&char) -> bool,
     {
-        let from = self.cursor.get_column() - 1;
+        let from = self.cursor.get_char_count() - 1;
         self.parse_while(predicate_fn);
-        let to = self.cursor.get_column();
+        let to = self.cursor.get_char_count();
         self.cursor.get_in_range(from..to)
     }
 
@@ -205,7 +205,6 @@ impl<'a> Lexer<'a> {
                         _ => GreaterThan,
                     },
                     '_' => match self.cursor.peek() {
-                        Some(c) if c.is_whitespace() => Underscore,
                         Some(c) if c.is_alphabetic() => self.parse_identifier(),
                         Some(c) if c.is_digit(10) => self.parse_identifier(),
                         _ => Underscore,
@@ -233,6 +232,7 @@ impl<'a> Lexer<'a> {
 #[cfg(test)]
 mod tests {
     use crate::lexer::*;
+    use pretty_assertions::assert_eq;
 
     fn read(string: &str) -> Vec<Token> {
         Lexer::new(Cursor::new(string)).read()

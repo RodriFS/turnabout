@@ -79,7 +79,6 @@ impl Interpreter {
             Expr::Sequence(exprs) => self.eval_sequence(exprs),
             Expr::Grouping(expr) => self.eval(*expr),
             Expr::If { pred, ant, cons } => self.eval_if(*pred, *ant, cons.map(|e| *e)),
-            Expr::Expression(expr) => self.eval(*expr),
             Expr::Binary {
                 operator,
                 left,
@@ -98,6 +97,7 @@ mod tests {
     use crate::lexer::*;
     use crate::parser::*;
     use crate::types::Type::*;
+    use pretty_assertions::assert_eq;
 
     fn eval<'a>(buffer: &'a str) -> Type {
         let cursor = Cursor::new(&buffer);
@@ -233,5 +233,17 @@ mod tests {
     fn test_sequence() {
         let result = eval("1+2; 2+2");
         assert_eq!(result, Int(4));
+    }
+
+    #[test]
+    fn test_if() {
+        let no_else_true = eval("if true 4");
+        assert_eq!(no_else_true, Int(4));
+
+        let with_else_true = eval("if true 4 else 1");
+        assert_eq!(with_else_true, Int(4));
+
+        let with_else_false = eval("if false 4 else 1");
+        assert_eq!(with_else_false, Int(1));
     }
 }

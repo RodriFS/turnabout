@@ -105,7 +105,6 @@ pub enum Expr {
     },
     Grouping(Box<Expr>),
     Sequence(Vec<Box<Expr>>),
-    Expression(Box<Expr>),
     Program(Box<Expr>),
     Unit,
     Ignore(TokenType),
@@ -251,7 +250,7 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
 
     fn parse_expression(&mut self) -> Expr {
         let token = self.peek().expect("EOF token not found");
-        let expr = match token.ttype {
+        match token.ttype {
             TokenType::Identifier {
                 kind: IdentifierKind::If,
             } => self.parse_if(),
@@ -262,15 +261,14 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
                 }
                 bin
             }
-        };
-
-        Expr::Expression(Box::new(expr))
+        }
     }
 
     pub fn parse(&mut self) -> Expr {
         let mut exprs = vec![];
-        while let Expr::Expression(expr) = self.parse_expression() {
-            exprs.push(expr);
+        loop {
+            let expr = self.parse_expression();
+            exprs.push(Box::new(expr));
             if self.check(TokenType::EOF) {
                 break;
             }
@@ -291,6 +289,7 @@ mod tests {
     use crate::cursor::*;
     use crate::lexer::*;
     use crate::parser::{LiteralKind::*, *};
+    use pretty_assertions::assert_eq;
 
     fn parse<'a>(buffer: &'a str) -> Expr {
         let cursor = Cursor::new(&buffer);
@@ -365,6 +364,29 @@ mod tests {
                     left: Box::new(Expr::Literal(Int(1))),
                     right: Box::new(Expr::Literal(Int(2))),
                 }),
+            }))
+        );
+    }
+
+    #[test]
+    fn test_if() {
+        let no_else = parse("if true 4");
+        assert_eq!(
+            no_else,
+            Expr::Program(Box::new(Expr::If {
+                pred: Box::new(Expr::Literal(Bool(true))),
+                ant: Box::new(Expr::Literal(Int(4))),
+                cons: None
+            }))
+        );
+
+        let with_else = parse("if true 4 else 1");
+        assert_eq!(
+            with_else,
+            Expr::Program(Box::new(Expr::If {
+                pred: Box::new(Expr::Literal(Bool(true))),
+                ant: Box::new(Expr::Literal(Int(4))),
+                cons: Some(Box::new(Expr::Literal(Int(1))))
             }))
         );
     }

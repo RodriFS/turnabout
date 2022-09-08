@@ -66,6 +66,10 @@ impl<'a> Cursor<'a> {
         self.line_nr + 1
     }
 
+    pub fn get_char_count(&self) -> usize {
+        self.char_count
+    }
+
     pub fn get_column(&self) -> usize {
         self.char_count - self.line_start
     }

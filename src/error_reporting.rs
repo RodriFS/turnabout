@@ -45,7 +45,7 @@ pub fn report_lexer_errors<'a>(source: &'a str, tokens: &Vec<Token>) -> bool {
 #[cfg(test)]
 mod tests {
     use crate::error_reporting::*;
-    use crate::utils::LiteralKind;
+    use crate::utils::{IdentifierKind, LiteralKind};
 
     #[test]
     fn empty_source() {
@@ -57,9 +57,13 @@ mod tests {
     fn correct_source() {
         let source = "let myvar = 4;";
         let tokens = vec![
-            Token::new(TokenType::Identifier),
+            Token::new(TokenType::Identifier {
+                kind: IdentifierKind::Raw("let".to_string()),
+            }),
             Token::new(TokenType::Whitespace),
-            Token::new(TokenType::Identifier),
+            Token::new(TokenType::Identifier {
+                kind: IdentifierKind::Raw("myvar".to_string()),
+            }),
             Token::new(TokenType::Whitespace),
             Token::new(TokenType::Assignment),
             Token::new(TokenType::Whitespace),
@@ -76,7 +80,9 @@ mod tests {
     fn incorrect_source_unexpected_character() {
         let source = "let @";
         let tokens = vec![
-            Token::new(TokenType::Identifier),
+            Token::new(TokenType::Identifier {
+                kind: IdentifierKind::Raw("let".to_string()),
+            }),
             Token::new(TokenType::Whitespace),
             Token::new(TokenType::Unexpected {
                 line_nr: 1,

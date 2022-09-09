@@ -1,5 +1,6 @@
 pub mod cursor;
 pub mod display;
+pub mod environment;
 pub mod error_reporting;
 pub mod errors;
 pub mod eval;

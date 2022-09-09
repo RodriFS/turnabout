@@ -103,6 +103,8 @@ pub enum Expr {
         left: Box<Expr>,
         right: Box<Expr>,
     },
+    Declaration(Box<Expr>),
+    Variable(String),
     Grouping(Box<Expr>),
     Block(Vec<Box<Expr>>),
     Program(Box<Expr>),
@@ -189,7 +191,10 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
                 self.expect(TokenType::RightParen);
                 self.next();
                 Expr::Grouping(Box::new(expr))
-            }
+            },
+            Some(Token {
+                ttype: TokenType::Identifier { kind: IdentifierKind::Raw(name) }
+            }) => Expr::Variable(name),
             Some(Token { ttype: rest }) => Expr::Ignore(rest),
             None => unreachable!("Eof token not found"),
         }
@@ -248,17 +253,21 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
         }
     }
 
+    fn parse_declaration(&mut self) -> Expr {
+        self.next();
+        Expr::Declaration(Box::new(self.parse_expression()))
+    }
+
     fn parse_expression(&mut self) -> Expr {
         let token = self.peek().expect("EOF token not found");
         match token.ttype {
             TokenType::Identifier {
                 kind: IdentifierKind::If,
             } => self.parse_if(),
-            TokenType::LeftCuBracket => {
-                let block = self.parse_block();
-
-                block
-            }
+            TokenType::Identifier {
+                kind: IdentifierKind::Let,
+            } => self.parse_declaration(),
+            TokenType::LeftCuBracket => self.parse_block(),
             _ => {
                 let bin = self.parse_binary(0);
                 if self.check(&TokenType::Semicolon) {
@@ -269,7 +278,7 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
         }
     }
 
-    pub fn parse_while(&mut self, ttype: TokenType, unwrap: bool) -> Expr {
+    pub fn consume_while(&mut self, ttype: TokenType, unwrap: bool) -> Expr {
         let mut exprs = vec![];
         loop {
             let expr = self.parse_expression();
@@ -286,13 +295,13 @@ impl<'a, I: Iterator<Item = Token>> Parser<I> {
 
     pub fn parse_block(&mut self) -> Expr {
         self.next();
-        let expr = self.parse_while(TokenType::RightCuBracket, false);
+        let expr = self.consume_while(TokenType::RightCuBracket, false);
         self.next();
         expr
     }
 
     pub fn parse_program(&mut self) -> Expr {
-        self.parse_while(TokenType::EOF, true)
+        self.consume_while(TokenType::EOF, true)
     }
 
     pub fn parse(&mut self) -> Expr {

@@ -113,6 +113,9 @@ impl<'a> Lexer<'a> {
             "else" => Identifier {
                 kind: IdentifierKind::Else,
             },
+            "let" => Identifier {
+                kind: IdentifierKind::Let,
+            },
             v => Identifier {
                 kind: IdentifierKind::Raw(v.to_string()),
             },

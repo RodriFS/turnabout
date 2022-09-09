@@ -1,9 +1,14 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
+    environment::Environment,
     errors::Error,
     parser::{BinOperator, Expr, UnOperator},
     types::Type,
     utils::LiteralKind,
 };
+
+type Env = Rc<RefCell<Environment>>;
 
 pub struct Interpreter {}
 
@@ -19,46 +24,67 @@ impl Interpreter {
             Expr::Literal(LiteralKind::Str(v)) => Ok(Type::Str(v)),
             Expr::Literal(LiteralKind::Bool(v)) => Ok(Type::Bool(v)),
             Expr::Unit => Ok(Type::Unit),
-            _ => unreachable!(),
+            v => unreachable!("{:?}", v),
         }
     }
 
-    fn eval_unary(&self, op: UnOperator, right: Expr) -> Result<Type, Error> {
+    fn eval_unary(&self, op: UnOperator, right: Expr, env: Env) -> Result<Type, Error> {
         // Check why ? not working
         match op {
-            UnOperator::Not => match self.eval(right) {
+            UnOperator::Not => match self.eval(right, env) {
                 Ok(v) => !v,
                 Err(e) => Err(e),
             },
-            UnOperator::Negative => match self.eval(right) {
+            UnOperator::Negative => match self.eval(right, env) {
                 Ok(v) => -v,
                 Err(e) => Err(e),
             },
         }
     }
 
-    fn eval_binary(&self, op: BinOperator, left: Expr, right: Expr) -> Result<Type, Error> {
+    fn eval_binary(
+        &self,
+        op: BinOperator,
+        left: Expr,
+        right: Expr,
+        env: Env,
+    ) -> Result<Type, Error> {
         match op {
-            BinOperator::Plus => self.eval(left)? + self.eval(right)?,
-            BinOperator::Minus => self.eval(left)? - self.eval(right)?,
-            BinOperator::Asterisk => self.eval(left)? * self.eval(right)?,
-            BinOperator::Slash => self.eval(left)? / self.eval(right)?,
-            BinOperator::GreaterThan => Ok(Type::Bool(self.eval(left)? > self.eval(right)?)),
-            BinOperator::GreaterThanEq => Ok(Type::Bool(self.eval(left)? >= self.eval(right)?)),
-            BinOperator::LessThan => Ok(Type::Bool(self.eval(left)? < self.eval(right)?)),
-            BinOperator::LessThanEq => Ok(Type::Bool(self.eval(left)? <= self.eval(right)?)),
-            BinOperator::Equal => Ok(Type::Bool(self.eval(left)? == self.eval(right)?)),
-            BinOperator::NotEqual => Ok(Type::Bool(self.eval(left)? != self.eval(right)?)),
+            BinOperator::Plus => self.eval(left, env.clone())? + self.eval(right, env.clone())?,
+            BinOperator::Minus => self.eval(left, env.clone())? - self.eval(right, env.clone())?,
+            BinOperator::Asterisk => {
+                self.eval(left, env.clone())? * self.eval(right, env.clone())?
+            }
+            BinOperator::Slash => self.eval(left, env.clone())? / self.eval(right, env.clone())?,
+            BinOperator::GreaterThan => Ok(Type::Bool(
+                self.eval(left, env.clone())? > self.eval(right, env.clone())?,
+            )),
+            BinOperator::GreaterThanEq => Ok(Type::Bool(
+                self.eval(left, env.clone())? >= self.eval(right, env.clone())?,
+            )),
+            BinOperator::LessThan => Ok(Type::Bool(
+                self.eval(left, env.clone())? < self.eval(right, env.clone())?,
+            )),
+            BinOperator::LessThanEq => Ok(Type::Bool(
+                self.eval(left, env.clone())? <= self.eval(right, env.clone())?,
+            )),
+            BinOperator::Equal => Ok(Type::Bool(
+                self.eval(left, env.clone())? == self.eval(right, env.clone())?,
+            )),
+            BinOperator::NotEqual => Ok(Type::Bool(
+                self.eval(left, env.clone())? != self.eval(right, env.clone())?,
+            )),
+            BinOperator::Assignment => self.eval_assignment(left, right, env),
             _ => unimplemented!(),
         }
     }
 
-    fn eval_if(&self, pred: Expr, ant: Expr, cons: Option<Expr>) -> Result<Type, Error> {
-        let predicate = self.eval(pred)?;
+    fn eval_if(&self, pred: Expr, ant: Expr, cons: Option<Expr>, env: Env) -> Result<Type, Error> {
+        let predicate = self.eval(pred, env.clone())?;
         match predicate {
-            Type::Bool(true) => self.eval(ant),
+            Type::Bool(true) => self.eval(ant, env),
             Type::Bool(false) => match cons {
-                Some(expr) => self.eval(expr),
+                Some(expr) => self.eval(expr, env),
                 None => Ok(Type::Unit),
             },
             _ => Err(Error::TypeError(
@@ -67,24 +93,69 @@ impl Interpreter {
         }
     }
 
-    fn eval_block(&self, exprs: Vec<Box<Expr>>) -> Result<Type, Error> {
+    fn eval_block(&self, exprs: Vec<Box<Expr>>, env: Env) -> Result<Type, Error> {
+        let env = Rc::new(RefCell::new(Environment::new(Some(env))));
         exprs
             .into_iter()
-            .fold(Ok(Type::Unit), |_, expr| self.eval(*expr))
+            .fold(Ok(Type::Unit), |_, expr| self.eval(*expr, env.clone()))
     }
 
-    pub fn eval(&self, expr: Expr) -> Result<Type, Error> {
+    fn eval_variable(&self, name: String, env: Env) -> Result<Type, Error> {
+        match env.borrow_mut().lookup(&name) {
+            Some(v) => Ok(v),
+            None => Err(Error::RuntimeError("Variable not declared")),
+        }
+    }
+
+    fn eval_declaration(&self, expr: Expr, env: Env) -> Result<Type, Error> {
         match expr {
-            Expr::Program(expr) => self.eval(*expr),
-            Expr::Block(exprs) => self.eval_block(exprs),
-            Expr::Grouping(expr) => self.eval(*expr),
-            Expr::If { pred, ant, cons } => self.eval_if(*pred, *ant, cons.map(|e| *e)),
+            Expr::Binary {
+                operator: BinOperator::Assignment,
+                left,
+                right,
+            } => match *left {
+                Expr::Variable(name) => {
+                    let value = self.eval(*right, env.clone())?;
+                    env.borrow_mut().vars.insert(name, value);
+                    Ok(Type::Unit)
+                }
+                _ => Err(Error::TypeError(
+                    "Left hand of assignment is not a variable name",
+                )),
+            },
+            _ => unreachable!(),
+        }
+    }
+
+    fn eval_assignment(&self, left: Expr, right: Expr, env: Env) -> Result<Type, Error> {
+        match left {
+            Expr::Variable(name) => {
+                let value = self.eval(right, env.clone())?;
+                env.borrow_mut().assign(name, value)?;
+                Ok(Type::Unit)
+            }
+            _ => {
+                return Err(Error::TypeError(
+                    "Left hand of assignment is not a variable name",
+                ))
+            }
+        }
+    }
+
+    pub fn eval(&self, expr: Expr, env: Env) -> Result<Type, Error> {
+        match expr {
+            Expr::Program(expr) => self.eval(*expr, env),
+            Expr::Block(exprs) => self.eval_block(exprs, env),
+            Expr::Grouping(expr) => self.eval(*expr, env),
+            Expr::If { pred, ant, cons } => self.eval_if(*pred, *ant, cons.map(|e| *e), env),
             Expr::Binary {
                 operator,
                 left,
                 right,
-            } => self.eval_binary(operator, *left, *right),
-            Expr::Unary { operator, right } => self.eval_unary(operator, *right),
+            } => self.eval_binary(operator, *left, *right, env),
+            Expr::Variable(name) => self.eval_variable(name, env),
+            Expr::Declaration(expr) => self.eval_declaration(*expr, env),
+            Expr::Unary { operator, right } => self.eval_unary(operator, *right, env),
             literal => self.eval_literal(literal),
         }
     }
@@ -106,7 +177,8 @@ mod tests {
         let mut parser = Parser::new(tokens.into_iter());
         let ast = parser.parse();
         let interpreter = Interpreter::new();
-        interpreter.eval(ast).unwrap()
+        let env = Environment::new(None);
+        interpreter.eval(ast, Rc::new(RefCell::new(env))).unwrap()
     }
 
     #[test]

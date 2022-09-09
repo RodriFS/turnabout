@@ -29,5 +29,6 @@ pub enum LiteralKind {
 pub enum IdentifierKind {
     If,
     Else,
+    Let,
     Raw(String),
 }

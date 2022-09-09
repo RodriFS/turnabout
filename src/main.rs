@@ -1,7 +1,10 @@
+use std::cell::RefCell;
 use std::fs;
 use std::io;
+use std::rc::Rc;
 use std::str;
 use turnabout::cursor::Cursor;
+use turnabout::environment::Environment;
 use turnabout::error_reporting::report_lexer_errors;
 use turnabout::eval::Interpreter;
 use turnabout::lexer::Lexer;
@@ -38,9 +41,8 @@ fn read<'a>(buffer: &str) -> Result<Expr, String> {
     Ok(ast)
 }
 
-fn eval(ast: Expr) {
-    let interpreter = Interpreter::new();
-    let result = interpreter.eval(ast);
+fn eval(interpreter: &Interpreter, env: Rc<RefCell<Environment>>, ast: Expr) {
+    let result = interpreter.eval(ast, env);
     match result {
         Ok(t) => println!("{}", t),
         Err(e) => println!("{}", e),
@@ -49,18 +51,21 @@ fn eval(ast: Expr) {
 
 fn main() -> Result<(), Error> {
     let file = std::env::args().nth(1);
+    let interpreter = Interpreter::new();
+    let env = Rc::new(RefCell::new(Environment::new(None)));
     if let Some(path) = file {
         let bytes = fs::read(path)?;
         let buffer = str::from_utf8(&bytes)?;
-        eval(read(buffer).unwrap());
+        eval(&interpreter, env, read(buffer).unwrap());
         return Ok(());
     }
+
     loop {
         let mut buffer = String::new();
         io::stdin().read_line(&mut buffer)?;
         if &buffer == "\n" {
             continue;
         }
-        eval(read(&buffer).unwrap());
+        eval(&interpreter, env.clone(), read(&buffer).unwrap());
     }
 }

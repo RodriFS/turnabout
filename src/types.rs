@@ -8,7 +8,7 @@ use std::ops::Sub;
 
 use crate::errors::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Int(i64),
     Float(f64),
